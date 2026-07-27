@@ -1,0 +1,110 @@
+:root {
+  --bg: #141210;
+  --bg-elevated: #1c1916;
+  --bg-hover: #25211d;
+  --bg-active: #2e2924;
+  --bg-input: #211e1a;
+  --text: #f5f5f4;
+  --text-secondary: #c4c0ba;
+  --text-muted: #8a857e;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --accent: #2dd4bf;
+  --accent-hover: #5eead4;
+  --accent-muted: rgba(45, 212, 191, 0.14);
+  --on-accent: #042f2e;
+  --positive: #34d399;
+  --negative: #f87171;
+  --warning: #fbbf24;
+  --focus-ring: rgba(245, 245, 244, 0.55);
+  --radius: 12px;
+  --radius-sm: 8px;
+  --font-sans: "Plus Jakarta Sans", "Segoe UI", sans-serif;
+  --font-num: "Manrope", "Plus Jakarta Sans", "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "Consolas", monospace;
+  --sidebar-width: 280px;
+  --ease: 240ms ease;
+  --ease-fade: 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+input,
+textarea,
+select,
+code,
+.mono,
+.address-emphasis,
+[contenteditable="true"] {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--accent-hover);
+}
+
+::selection {
+  background: rgba(45, 212, 191, 0.25);
+  color: var(--text);
+}
+
+:focus-visible {
+  outline: 1px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Scroll-wheel/touch scrolling stays fully functional everywhere;
+   the scrollbar track/thumb itself is just never painted. */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}

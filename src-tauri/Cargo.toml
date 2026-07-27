@@ -1,0 +1,64 @@
+[package]
+name = "opal"
+version = "0.1.0"
+description = "Opal — quiet self-custody desktop wallet"
+authors = ["Opal Contributors"]
+edition = "2021"
+license = "MIT"
+
+[lib]
+name = "opal_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-opener = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+anyhow = "1"
+dirs = "6"
+rand = "0.8"
+zeroize = { version = "1", features = ["derive"] }
+argon2 = "0.5"
+aes-gcm = "0.10"
+base64 = "0.22"
+parking_lot = "0.12"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
+bip39 = { version = "2", features = ["rand"] }
+bitcoin = { version = "0.32", features = ["rand", "std", "secp-recovery"] }
+secp256k1 = { version = "0.29", features = ["rand", "std", "global-context"] }
+k256 = { version = "0.13", features = ["ecdsa"] }
+sha3 = "0.10"
+sha2 = "0.10"
+hmac = "0.12"
+ripemd = "0.1"
+hex = "0.4"
+bs58 = { version = "0.5", features = ["check"] }
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+slip10_ed25519 = "0.1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "socks", "blocking"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+url = "2"
+once_cell = "1"
+rlp = "0.5"
+num-bigint = "0.4"
+num-traits = "0.2"
+bech32 = "0.11"
+monero = { version = "0.21", default-features = false, features = ["serde"] }
+tiny-keccak = { version = "2", features = ["keccak"] }
+curve25519-dalek = "4"
+unicode-normalization = "0.1"
+nusb = "0.2"
+futures-lite = "2"
+chacha20poly1305 = "0.10"
