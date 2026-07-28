@@ -1,6 +1,4 @@
-import type { SeedSetupIntent } from "./seedIntent";
-
-export type { SeedSetupIntent };
+export type SeedSetupIntent = "create" | "restore";
 
 export type SetupStep =
   | "path"
