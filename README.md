@@ -19,6 +19,16 @@ Opal is a **hybrid wallet**: software portfolios, Trezor hardware, and watch-onl
 
 Vault file: `%AppData%\Opal\vault.opal`
 
+## Screenshots
+
+Overview - total balance, growth chart, analytics, and recent activity:
+
+![Opal Overview](docs/screenshots/overview.png)
+
+Monero portfolio - XMR balance and 1D performance on Trezor:
+
+![Opal XMR portfolio](docs/screenshots/xmr-portfolio.png)
+
 ## Quick start (dev)
 
 You need Node 20+, Rust stable (`rustup`), and Visual Studio Build Tools with the C++ workload.
