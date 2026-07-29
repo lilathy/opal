@@ -66,7 +66,7 @@ export function IconSwap(p: Props) {
   );
 }
 
-/** Vertical flip — used on the swap panel divider. */
+/** Vertical flip - used on the swap panel divider. */
 export function IconFlip(p: Props) {
   return (
     <Ico {...p}>

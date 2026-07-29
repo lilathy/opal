@@ -88,7 +88,7 @@ export function parseTxTimestamp(ts: string): number | null {
 
 /**
  * Turn wallet history into signed ledger events. Failed txs are skipped;
- * self-transfers don't change net holdings (fees on self are ignored — many
+ * self-transfers don't change net holdings (fees on self are ignored - many
  * explorers already bake fee into the reported amount for spends).
  */
 export function txsToLedger(txs: TxRow[]): LedgerEvent[] {
@@ -120,10 +120,10 @@ export function txsToLedger(txs: TxRow[]): LedgerEvent[] {
  *
  * Important: explorers only return a recent window. If the funding receive is
  * older than that window, the residual after undoing known txs is still held
- * balance from before our history — keep it. Zeroing at the oldest *fetched*
+ * balance from before our history - keep it. Zeroing at the oldest *fetched*
  * tx made restored portfolios look like they received funds "today".
  *
- * If we have no ledger events for this coin, we refuse to invent history —
+ * If we have no ledger events for this coin, we refuse to invent history -
  * returning 0 instead of projecting today's balance across the whole chart.
  */
 function amountAt(
@@ -350,7 +350,7 @@ function segmentControls(points: Array<{ x: number; y: number }>, i: number) {
 
 /**
  * Y on the same cubic path `smoothPath` draws, at a given X.
- * Linear chords float above dips — this keeps the hover dot glued to the curve.
+ * Linear chords float above dips - this keeps the hover dot glued to the curve.
  */
 export function smoothYAtX(
   points: Array<{ x: number; y: number }>,

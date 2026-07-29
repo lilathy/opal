@@ -21,7 +21,7 @@
   --radius-sm: 8px;
 
   /*
-   * Typography — exactly four styles, one family:
+   * Typography - exactly four styles, one family:
    *   Text:   500 (body) / 700 (emphasis)
    *   Numbers: 500 (secondary) / 700 (primary balances)
    */
@@ -34,10 +34,10 @@
   --sidebar-width: 280px;
 
   /*
-   * Motion — three jobs only:
-   *   Enter   — fade-up (--dur)
-   *   Step    — horizontal slide (--dur-step)
-   *   Press   — soft scale (--dur)
+   * Motion - three jobs only:
+   *   Enter   - fade-up (--dur)
+   *   Step    - horizontal slide (--dur-step)
+   *   Press   - soft scale (--dur)
    * Color/border hovers use --dur-fast.
    */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
@@ -95,7 +95,7 @@ body {
   font-feature-settings: normal;
 }
 
-/* Number styles — same face; weight is the only difference */
+/* Number styles - same face; weight is the only difference */
 .type-num {
   font-family: var(--font-ui);
   font-weight: var(--weight-num);

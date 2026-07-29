@@ -1,6 +1,6 @@
 //! Solana native + SPL send (legacy messages, ed25519_dalek signing).
 //!
-//! RPC URL: uses `HttpCtx::chain_rpc(ChainId::Sol)` — do not hardcode endpoints.
+//! RPC URL: uses `HttpCtx::chain_rpc(ChainId::Sol)` - do not hardcode endpoints.
 //! (`rpc_url` is private on HttpCtx; `chain_rpc` is the public wrapper.)
 
 use base64::Engine;
@@ -204,7 +204,7 @@ pub fn send_sol_token(
 
     if !account_exists(http, &bs58::encode(from_ata).into_string())? {
         return Err(OpalError::InvalidInput(
-            "sender associated token account missing — fund/create ATA first".into(),
+            "sender associated token account missing - fund/create ATA first".into(),
         ));
     }
     let need_create_dest = !account_exists(http, &bs58::encode(to_ata).into_string())?;
@@ -212,7 +212,7 @@ pub fn send_sol_token(
     let recent = fetch_recent_blockhash(http)?;
 
     // Keys:
-    // 0 from (signer, writable) — fee payer + transfer authority
+    // 0 from (signer, writable) - fee payer + transfer authority
     // 1 from_ata (writable)
     // 2 to_ata (writable)
     // then readonly: [to?, mint, system?, token, ata?] depending on create
@@ -321,7 +321,7 @@ fn sol_fee_for_message(
     if let Some(err) = v.get("error") {
         return Err(OpalError::Io(format!("getFeeForMessage: {err}")));
     }
-    // null when blockhash expired — caller falls back to 5000
+    // null when blockhash expired - caller falls back to 5000
     Ok(v["result"]["value"].as_u64())
 }
 
@@ -661,7 +661,7 @@ mod tests {
     #[test]
     fn signed_tx_accepted_by_publicnode_sigverify() {
         // Live RPC: a correctly signed (unfunded) transfer must fail on fee payer
-        // balance — NOT signature verification. Regresses wire format + dalek signing.
+        // balance - NOT signature verification. Regresses wire format + dalek signing.
         use std::collections::HashMap;
         let http = match HttpCtx::new(None, HashMap::new()) {
             Ok(h) => h,
@@ -687,7 +687,7 @@ mod tests {
         };
         assert!(
             !err.to_lowercase().contains("signature verification"),
-            "sigverify failed — wire format or signing bug: {err}"
+            "sigverify failed - wire format or signing bug: {err}"
         );
         assert!(
             err.contains("fee")

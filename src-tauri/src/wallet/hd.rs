@@ -513,7 +513,7 @@ pub fn derive_evm_address(
     })
 }
 
-/// Tron BIP44 path m/44'/195'/account'/0/index — same secp256k1 key as ETH, Base58Check address.
+/// Tron BIP44 path m/44'/195'/account'/0/index - same secp256k1 key as ETH, Base58Check address.
 pub fn derive_trx_address(
     mnemonic: &str,
     passphrase: &str,
@@ -591,7 +591,7 @@ pub fn derive_sol_address(
 }
 
 /// Exodus Solana: BIP32-secp256k1 path `m/44'/501'/account'/0/0`, then use the
-/// 32-byte private key as an ed25519 seed. (Not SLIP-0010 — soft path tails.)
+/// 32-byte private key as an ed25519 seed. (Not SLIP-0010 - soft path tails.)
 pub fn derive_sol_exodus(
     mnemonic: &str,
     passphrase: &str,

@@ -752,7 +752,7 @@
   width: 100%;
   text-align: left;
   display: grid;
-  /* Fixed 32px icon column forever — rename must never change column 1. */
+  /* Fixed 32px icon column forever - rename must never change column 1. */
   grid-template-columns: 32px minmax(0, 1fr) auto;
   grid-template-rows: auto auto;
   column-gap: 12px;
@@ -764,7 +764,7 @@
   background: transparent;
   color: var(--text);
   /* Hard-pinned (not min-) height, plus overflow guard, so nothing about
-     renaming — a taller font metric, an input's own border, anything —
+     renaming - a taller font metric, an input's own border, anything -
      can ever nudge this box's footprint by even a pixel. */
   height: 58px;
   overflow: hidden;
@@ -1696,11 +1696,11 @@
 
 .portfolio-group__main {
   display: grid;
-  /* Fixed 32px icon column forever — rename must never change column 1. */
+  /* Fixed 32px icon column forever - rename must never change column 1. */
   grid-template-columns: 32px minmax(0, 1fr) auto;
   align-items: center;
   column-gap: 12px;
-  /* Hard-pinned (not min-) height, plus overflow guard — see .portfolio-item
+  /* Hard-pinned (not min-) height, plus overflow guard - see .portfolio-item
      for why: renaming must never be able to nudge this box's footprint. */
   height: 56px;
   overflow: hidden;
@@ -1867,7 +1867,7 @@
   height: 100%;
 }
 
-/* Exodus badge art already bakes in its own hex outline — no extra clip. */
+/* Exodus badge art already bakes in its own hex outline - no extra clip. */
 .crypto-img--shaped {
   border-radius: 0;
   overflow: visible;
@@ -2017,7 +2017,7 @@
 }
 
 /* Lives inline with the period chips (1D/1W/1M/…) now, not as its own big
-   banner above the chart — sized and weighted to match them, just grouped
+   banner above the chart - sized and weighted to match them, just grouped
    in its own small pill so the two controls stay visually distinct. */
 .chart-mode-toggle {
   display: flex;
@@ -2265,7 +2265,7 @@
 }
 
 /* Hide the browser's own up/down spinner arrows wherever a bare
-   type="number" input is still used — they render in the OS theme and
+   type="number" input is still used - they render in the OS theme and
    clash badly with everything else here being custom-drawn. */
 input[type="number"] {
   appearance: textfield;
@@ -2571,10 +2571,10 @@ input[type="number"]::-webkit-outer-spin-button {
 /* ── Swap ─────────────────────────────────────────────
    Same field rhythm as Send: label row → value + asset → hint row.
    Typography:
-     Numbers 700 — primary amounts
-     Numbers 500 — secondary amounts / balances
-     Text 700   — labels, picker titles, preset links, rate values
-     Text 500   — meta, menu details, hints
+     Numbers 700 - primary amounts
+     Numbers 500 - secondary amounts / balances
+     Text 700   - labels, picker titles, preset links, rate values
+     Text 500   - meta, menu details, hints
 */
 
 .swap-page {
@@ -3135,7 +3135,7 @@ input[type="number"]::-webkit-outer-spin-button {
   padding-right: 46px !important;
 }
 
-/* Edge / Chrome ship a native reveal control — hide it so only our toggle shows. */
+/* Edge / Chrome ship a native reveal control - hide it so only our toggle shows. */
 .password-shell__input::-ms-reveal,
 .password-shell__input::-ms-clear {
   display: none;
@@ -4120,7 +4120,7 @@ input[type="number"]::-webkit-outer-spin-button {
 }
 
 /* Renaming keeps the exact same grid (columns, padding, row height) as the
-   normal row — the icon slot (column 1) is never touched. Only columns 2–3
+   normal row - the icon slot (column 1) is never touched. Only columns 2-3
    swap to the input. */
 .portfolio-item--renaming,
 .portfolio-group__main--renaming {

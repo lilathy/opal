@@ -46,7 +46,7 @@ export function SettingsScreen() {
   const { refresh, lockVault, wipeVault } = useVault();
   const { notify } = useNotify();
   const [settings, setSettings] = useState<AppSettings | null>(null);
-  // Which single field is currently saving — scoped per-control so flipping
+  // Which single field is currently saving - scoped per-control so flipping
   // one switch doesn't dim every other control on the page at once.
   const [busyField, setBusyField] = useState<string | null>(null);
   const [presetBusy, setPresetBusy] = useState(false);

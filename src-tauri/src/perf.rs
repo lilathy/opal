@@ -16,7 +16,7 @@ static LOG_LOCK: Mutex<()> = Mutex::new(());
 
 /// Raise this process (and WebView2 children) so Windows prefers Opal over
 /// Idle / Below-Normal browser farms. Starts a watchdog that re-applies
-/// priority — farmer tools often demote every `msedgewebview2.exe`.
+/// priority - farmer tools often demote every `msedgewebview2.exe`.
 pub fn boost_responsiveness() {
     log_line("perf", "boost_responsiveness() enter");
     #[cfg(windows)]
@@ -535,7 +535,7 @@ mod windows {
                 // Cheap path: only touch known PIDs (no full process table walk).
                 reboost_cached_pids(&cached_pids);
                 if tick % 4 == 0 {
-                    // Refresh tree occasionally — Toolhelp is expensive on Chrome farms.
+                    // Refresh tree occasionally - Toolhelp is expensive on Chrome farms.
                     let n = boost_webview_children(opal_pid);
                     cached_pids = collect_webview_tree(opal_pid)
                         .into_iter()

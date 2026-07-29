@@ -10,7 +10,7 @@ type Props = {
   ariaLabel?: string;
 };
 
-/** Linear procedure chrome — same pattern as Add Portfolio. */
+/** Linear procedure chrome - same pattern as Add Portfolio. */
 export function ProcedureShell({
   steps,
   activeId,

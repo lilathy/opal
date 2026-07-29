@@ -173,7 +173,7 @@ export function useAnimatedNumber(
       }
 
       displayRef.current = next;
-      // Publish when the visible cent would change — keeps the count readable
+      // Publish when the visible cent would change - keeps the count readable
       // without flooding React on sub-cent spring noise.
       if (Math.round(next * 100) !== Math.round(current * 100)) {
         setDisplay(next);

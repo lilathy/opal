@@ -92,9 +92,9 @@ export interface PortfolioBalance {
 
 export interface TxRow {
   txid: string;
-  /** Human-readable, already divided by decimals — never a raw base-unit integer. */
+  /** Human-readable, already divided by decimals - never a raw base-unit integer. */
   amount: string;
-  /** Ticker to show next to `amount` — native symbol, or a token symbol for ERC-20/TRC-20 rows. */
+  /** Ticker to show next to `amount` - native symbol, or a token symbol for ERC-20/TRC-20 rows. */
   symbol: string;
   direction: "in" | "out" | "self" | "unknown" | string;
   timestamp: string;
@@ -194,7 +194,7 @@ export function parseInvokeError(error: unknown): OpalErrorBody {
 }
 
 const historyCache = new Map<string, { at: number; rows: TxRow[] }>();
-const HISTORY_CACHE_MS = 5 * 60_000; // 5 min — overview chart must not re-RPC constantly
+const HISTORY_CACHE_MS = 5 * 60_000; // 5 min - overview chart must not re-RPC constantly
 
 function historyStorageKey(portfolioId: string) {
   return `opal:hist:${portfolioId}`;
@@ -324,7 +324,7 @@ export function trezorAutoVerifySupported(chain: string): boolean {
   );
 }
 
-/** Chains offered when custody = Trezor (no Gram/TON — no Trezor messages). */
+/** Chains offered when custody = Trezor (no Gram/TON - no Trezor messages). */
 export function trezorSupportedChains(): string[] {
   return [
     "btc",

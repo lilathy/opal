@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "Opal",
-    "tagline": "Quiet self-custody"
+    "tagline": "Hybrid self-custody"
   },
   "common": {
     "continue": "Continue",
@@ -25,7 +25,7 @@
     "presetParanoid": "Paranoid",
     "presetHint": "Normal is recommended. Paranoid uses more memory and unlocks slower.",
     "wipe": "Wipe local vault after 10 failed unlock attempts",
-    "wipeHint": "Off by default. Enabling this destroys encrypted local data after 10 wrong passwords — seed recovery is the only way back.",
+    "wipeHint": "Off by default. Enabling this destroys encrypted local data after 10 wrong passwords - seed recovery is the only way back.",
     "mismatch": "Passwords do not match.",
     "submit": "Create vault",
     "working": "Deriving key…"
@@ -60,7 +60,7 @@
     "wordCount": "Word count",
     "generate": "Generate seed",
     "writeDown": "Write these words offline. Never share them. Screenshots are blocked where possible.",
-    "screenProtectNote": "Selection is disabled here. OS-level screen capture blocking is not available from the webview — keep this window private.",
+    "screenProtectNote": "Selection is disabled here. OS-level screen capture blocking is not available from the webview - keep this window private.",
     "retype": "Retype your seed to confirm",
     "confirmed": "I have backed up my seed",
     "confirmMismatch": "Confirmation does not match.",
@@ -68,7 +68,7 @@
     "passphraseOptional": "BIP39 passphrase (optional)",
     "restoreSubmit": "Restore wallet",
     "copy": "Copy seed (clears clipboard immediately)",
-    "copiedCleared": "Copied — clipboard cleared"
+    "copiedCleared": "Copied - clipboard cleared"
   },
   "portfolio": {
     "name": "Name",
@@ -153,7 +153,7 @@
     "preset": "Security preset",
     "presetHint": "Changing preset re-wraps the vault key and requires your password",
     "tor": "Tor SOCKS proxy",
-    "torHint": "Example: 127.0.0.1:9050 — leave empty to disable",
+    "torHint": "Example: 127.0.0.1:9050 - leave empty to disable",
     "autolock": "Auto-lock (minutes)",
     "autolockHint": "0 means never auto-lock while unlocked (not recommended)",
     "startWithWindows": "Start with Windows",

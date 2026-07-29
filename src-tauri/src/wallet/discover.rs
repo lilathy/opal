@@ -163,7 +163,7 @@ pub fn address_is_active(http: &HttpCtx, chain: ChainId, address: &str) -> bool 
         ChainId::Xmr => {
             // Lightweight: any non-empty address with a previous view-key wallet
             // balance is handled elsewhere; for discovery probe via public
-            // explorer-less check — treat as active if wallet-rpc can see funds
+            // explorer-less check - treat as active if wallet-rpc can see funds
             // once a view key is known. During discovery we only have the address,
             // so skip false negatives by returning false here and relying on
             // Monero watch-key + balance scrape after import for funded detection
@@ -334,7 +334,7 @@ pub fn discover_funded_portfolios(
             probe.account,
             address_type_key(probe.address_type).unwrap_or("")
         );
-        // One portfolio per chain/account/style — lowest receive index wins.
+        // One portfolio per chain/account/style - lowest receive index wins.
         if !seen_group.insert(group) {
             continue;
         }

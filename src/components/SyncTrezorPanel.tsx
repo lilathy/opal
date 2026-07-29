@@ -10,7 +10,7 @@ type Props = {
 };
 
 /**
- * First-connect / manual Sync my Trezor — scans funded accounts on-device
+ * First-connect / manual Sync my Trezor - scans funded accounts on-device
  * and creates Trezor portfolios (no Suite paste).
  */
 export function SyncTrezorPanel({ trezorStatus, onDone, onCancel }: Props) {

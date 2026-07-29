@@ -41,7 +41,7 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
                 .ok_or("missing window icon for tray")?,
         )
         .menu(&menu)
-        .tooltip("Opal — Quiet self-custody")
+        .tooltip("Opal - Quiet self-custody")
         .on_menu_event(|app, event| match event.id.as_ref() {
             "show" => {
                 if let Some(w) = app.get_webview_window("main") {

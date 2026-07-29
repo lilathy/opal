@@ -187,7 +187,7 @@ pub fn update_settings(
     if let Some(v) = request.analytics_hidden_tiles {
         unlocked.payload.settings.analytics_hidden_tiles = v;
     }
-    // custom_rpc ignored — Opal uses curated public nodes only.
+    // custom_rpc ignored - Opal uses curated public nodes only.
     unlocked.payload.settings.custom_rpc.clear();
 
     if let Some(v) = request.fixedfloat_api_key {
@@ -283,7 +283,7 @@ pub struct VaultExportRequest {
 
 /// Copy the encrypted vault file to dest (metadata backup). Seed is inside ciphertext.
 // Password KDF verification is CPU-heavy (multi-second under the Paranoid
-// preset) — run off the webview's main thread so exporting doesn't freeze it.
+// preset) - run off the webview's main thread so exporting doesn't freeze it.
 #[tauri::command]
 pub async fn vault_export(app: AppHandle, request: VaultExportRequest) -> Result<(), String> {
     on_worker(move || {

@@ -1,6 +1,6 @@
 # Architecture
 
-Opal is a Tauri 2 desktop app: React for the shell UI, Rust for vault crypto, chain I/O, and Trezor sessions.
+Opal is a hybrid wallet (software + Trezor + watch-only) built as a Tauri 2 desktop app: React for the shell UI, Rust for vault crypto, chain I/O, and Trezor sessions.
 
 ## High-level flow
 
@@ -48,7 +48,7 @@ Balances are scraped from curated public nodes, cached in the vault for offline 
 
 ## Trezor
 
-Sessions go through Trezor Bridge when Suite/trezord is up, otherwise native USB. Device I/O is serialized so status polls and auto-sync cannot interrupt an in-flight SignTx. PIN entry still happens on the device / Suite — Opal does not collect the PIN.
+Sessions go through Trezor Bridge when Suite/trezord is up, otherwise native USB. Device I/O is serialized so status polls and auto-sync cannot interrupt an in-flight SignTx. PIN entry still happens on the device / Suite - Opal does not collect the PIN.
 
 ## Networking
 

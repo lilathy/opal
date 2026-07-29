@@ -50,7 +50,7 @@ export function AddPortfolio({ existing, onDone, onCancel }: Props) {
     });
   }
   const [section, setSection] = useState<Section>("network");
-  // Which way the step pane should slide in from — set right before changing
+  // Which way the step pane should slide in from - set right before changing
   // `section` so the remount (keyed on section) picks up the right animation.
   const [direction, setDirection] = useState<"forward" | "back">("forward");
   const [name, setName] = useState("");
@@ -324,7 +324,7 @@ export function AddPortfolio({ existing, onDone, onCancel }: Props) {
                     <p className="field-hint" style={{ marginTop: 10, marginBottom: 0 }}>
                       {t("portfolio.trezorNoSendHint", {
                         defaultValue:
-                          "Sending isn't wired up for this network yet — you'll be able to receive and track balances, but use Trezor Suite to send.",
+                          "Sending isn't wired up for this network yet - you'll be able to receive and track balances, but use Trezor Suite to send.",
                       })}
                     </p>
                   ) : null}
@@ -375,7 +375,7 @@ export function AddPortfolio({ existing, onDone, onCancel }: Props) {
           ) : null}
         </div>
 
-        {/* Fixed footer — deliberately outside the sliding pane above so the
+        {/* Fixed footer - deliberately outside the sliding pane above so the
             Back/Continue/Save buttons never move as steps change. */}
         <div className="form-actions">
           <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={busy}>

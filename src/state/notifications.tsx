@@ -15,7 +15,7 @@ export type NotificationItem = {
   kind: NotificationKind;
   title: string;
   message: string;
-  /** Asset ticker — when set, the toast shows that crypto icon. */
+  /** Asset ticker - when set, the toast shows that crypto icon. */
   symbol?: string;
   /** Formatted amount line (incoming), e.g. "+0.25 BTC". */
   amount?: string;

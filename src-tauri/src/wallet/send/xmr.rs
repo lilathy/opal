@@ -125,7 +125,7 @@ fn with_open_wallet<T>(
 }
 
 /// Sync wallet and return balance as an XMR decimal string (from atomic units).
-/// Does not spawn monero-wallet-rpc — if RPC isn't already up, returns "0" so
+/// Does not spawn monero-wallet-rpc - if RPC isn't already up, returns "0" so
 /// background balance polls never freeze the app for ~30s.
 pub fn xmr_balance(
     http: &HttpCtx,
@@ -242,7 +242,7 @@ pub fn xmr_history(
     })
 }
 
-/// Trezor hardware send — spend key stays on device.
+/// Trezor hardware send - spend key stays on device.
 pub fn xmr_send_trezor(
     http: &HttpCtx,
     view_hex: &str,
@@ -326,7 +326,7 @@ pub fn xmr_send_trezor(
             .map_err(|e| OpalError::InvalidInput(format!("tx pubkey: {e}")))?;
         if real_pub.len() != 32 || tx_key.len() != 32 {
             return Err(OpalError::InvalidInput(
-                "bad output keys from wallet-rpc — Sync my Trezor and retry".into(),
+                "bad output keys from wallet-rpc - Sync my Trezor and retry".into(),
             ));
         }
         let ring = daemon.fetch_ring(sel.global_index, mixin, &real_pub)?;
@@ -563,7 +563,7 @@ impl DaemonRpc {
         ring.sort_by_key(|m| m.global_index);
         if ring.len() < 2 {
             return Err(OpalError::Io(
-                "could not build a decoy ring from the Monero daemon — try again shortly".into(),
+                "could not build a decoy ring from the Monero daemon - try again shortly".into(),
             ));
         }
         Ok(ring)

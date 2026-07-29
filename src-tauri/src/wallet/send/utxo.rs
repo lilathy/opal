@@ -156,7 +156,7 @@ fn send_segwit_like(
     let script_pubkey = if chain == ChainId::Ltc || matches!(address_type, AddressType::NativeSegwit) {
         Address::p2wpkh(&pk, Network::Bitcoin).script_pubkey()
     } else if matches!(address_type, AddressType::Taproot) {
-        // Taproot key-path: tweak not fully implemented for spend in this path —
+        // Taproot key-path: tweak not fully implemented for spend in this path -
         // portfolios created as taproot still receive; spend falls back after re-derive as segwit message
         return Err(OpalError::InvalidInput(
             "Taproot send uses key-path PSBT; create a native SegWit account to spend, or wait for full BIP86 spend".into(),
@@ -349,7 +349,7 @@ fn send_doge(
     let (balance, mut utxos) = http.btc_address_info(ChainId::Doge, &from_addr)?;
     if utxos.is_empty() {
         return Err(OpalError::InvalidInput(format!(
-            "no DOGE UTXOs (balance {balance}). Explorer may be rate-limited — retry shortly."
+            "no DOGE UTXOs (balance {balance}). Explorer may be rate-limited - retry shortly."
         )));
     }
     utxos.sort_by(|a, b| b.value.cmp(&a.value));
@@ -664,7 +664,7 @@ pub fn send_btc_like_trezor(
 
     if matches!(address_type, AddressType::Taproot) {
         return Err(OpalError::InvalidInput(
-            "Taproot Trezor send is not supported yet — use a native SegWit account".into(),
+            "Taproot Trezor send is not supported yet - use a native SegWit account".into(),
         ));
     }
 

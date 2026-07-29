@@ -71,7 +71,7 @@ export function useIncomingWatcher(
       const portfolioId = key.slice(0, colon);
       const symbol = key.slice(colon + 1);
 
-      // Stale post-send scrape — ignore entirely.
+      // Stale post-send scrape - ignore entirely.
       const ceiling = pendingAmountCeiling(portfolioId, symbol);
       if (ceiling != null && newAmt > ceiling + 1e-9) continue;
 

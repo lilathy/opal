@@ -60,7 +60,7 @@ type IconEntry = { markup: string; shaped: boolean };
 const shaped = (markup: string): IconEntry => ({ markup, shaped: true });
 const unshaped = (markup: string): IconEntry => ({ markup, shaped: false });
 
-/** Chain "badge" icon — one per network we support adding a portfolio for. */
+/** Chain "badge" icon - one per network we support adding a portfolio for. */
 const CHAIN_SRC: Record<string, IconEntry> = {
   btc: shaped(exBtc),
   eth: shaped(exEth),
@@ -158,7 +158,7 @@ function CryptoSvg({ entry, size, className }: SvgIconProps) {
     <span
       className={className ? `${cls} ${className}` : cls}
       style={{ width: size, height: size }}
-      // Trusted, bundled, static icon markup — never user-controlled.
+      // Trusted, bundled, static icon markup - never user-controlled.
       dangerouslySetInnerHTML={{ __html: markup }}
     />
   );

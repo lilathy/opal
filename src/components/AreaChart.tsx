@@ -8,7 +8,7 @@ type Props = {
   tone?: "up" | "down" | "flat";
   className?: string;
   formatValue?: (v: number) => string;
-  /** Selected chart window — controls hover timestamp formatting. */
+  /** Selected chart window - controls hover timestamp formatting. */
   periodDays?: number;
 };
 
@@ -41,7 +41,7 @@ export function AreaChart({
   periodDays = 7,
 }: Props) {
   const gid = useId().replace(/:/g, "");
-  // Continuous cursor-space x (viewBox units), not a snapped point index —
+  // Continuous cursor-space x (viewBox units), not a snapped point index -
   // this is what lets the crosshair track the mouse 1:1 instead of jumping
   // between data points and relying on a CSS transition to "catch up"
   // (which is what caused the laggy, rubber-banding feel).
@@ -51,7 +51,7 @@ export function AreaChart({
     tone ??
     (points.length >= 2 && points[points.length - 1].v < points[0].v ? "down" : "up");
 
-  // Always one of the two P&L colors — never the neon accent, even for a
+  // Always one of the two P&L colors - never the neon accent, even for a
   // perfectly flat line or a lone data point.
   const stroke = derivedTone === "down" ? "var(--negative)" : "var(--positive)";
 
@@ -154,13 +154,13 @@ export function AreaChart({
         <>
           {/* Rendered as real HTML (not SVG) so the chart's non-uniform x/y
              viewBox scaling can't stretch the dot into an ellipse. Position
-             follows the cursor directly (no transition) — that 1:1 tracking
+             follows the cursor directly (no transition) - that 1:1 tracking
              *is* the smooth glide; a delay here is what read as laggy. */}
           <div
             className="area-chart__dot"
             style={{
               left: `${(hi.x / 640) * 100}%`,
-              // Percent of chart height — matches viewBox Y under preserveAspectRatio=none.
+              // Percent of chart height - matches viewBox Y under preserveAspectRatio=none.
               top: `${(hi.y / height) * 100}%`,
               background: stroke,
             }}

@@ -9,7 +9,7 @@ interface Props {
   onDone: () => Promise<void>;
   /** Path chosen on Create vault (or sidebar). */
   initialMode?: "choose" | SeedSetupIntent;
-  /** When true, user already picked Fresh/Recover — no chooser, no switching. */
+  /** When true, user already picked Fresh/Recover - no chooser, no switching. */
   lockPath?: boolean;
 }
 
@@ -63,7 +63,7 @@ export function SeedSetup({ onDone, initialMode = "choose", lockPath = false }: 
         setMnemonic(phrase);
         setCreateStep("backup");
       } catch {
-        /* no seed yet — stay on words */
+        /* no seed yet - stay on words */
       }
     })();
     return () => {
@@ -134,7 +134,7 @@ export function SeedSetup({ onDone, initialMode = "choose", lockPath = false }: 
       try {
         phrase = await api.walletCreateSeed(words);
       } catch {
-        // Already generated earlier in this session — reuse it.
+        // Already generated earlier in this session - reuse it.
         phrase = await api.walletRevealSeed();
       }
       setMnemonic(phrase);
@@ -176,7 +176,7 @@ export function SeedSetup({ onDone, initialMode = "choose", lockPath = false }: 
       try {
         await api.walletDiscoverPortfolios();
       } catch {
-        /* best-effort — defaults may still have been written */
+        /* best-effort - defaults may still have been written */
       }
       await onDone();
     } catch (e) {

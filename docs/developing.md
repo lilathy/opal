@@ -46,7 +46,7 @@ Copy examples, never commit real values:
 | `.env.example` | Documented env vars (optional for most local work) |
 | `fixedfloat.local.json` | Optional FixedFloat key/secret for in-app order create (gitignored) |
 
-Updater signing keys belong under `%USERPROFILE%\.tauri\` and in GitHub Actions secrets — not in this tree.
+Updater signing keys belong under `%USERPROFILE%\.tauri\` and in GitHub Actions secrets - not in this tree.
 
 ## Code habits
 

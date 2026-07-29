@@ -2,8 +2,8 @@
 
 ## Stack
 
-- Tauri 2 + Rust — vault, OS integration, chain I/O, Trezor
-- React + TypeScript — UI
+- Tauri 2 + Rust - vault, OS integration, chain I/O, Trezor
+- React + TypeScript - UI
 
 Product overview: [README.md](README.md)  
 Dev setup: [docs/developing.md](docs/developing.md)
@@ -19,7 +19,7 @@ If PowerShell blocks npm: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
 ## Rules
 
 - Keys never log. Redact secrets in diagnostics.
-- Use the vault helpers in `src-tauri/src/vault` — do not invent ad-hoc crypto.
+- Use the vault helpers in `src-tauri/src/vault` - do not invent ad-hoc crypto.
 - Keep UI flat and warm-dark; follow existing patterns in `src/styles`.
 - Fit new work into the vault → portfolio model instead of bolting on side paths.
 - Do not commit `.env`, `*.local.json`, vault backups, seeds, or signing private keys.

@@ -41,7 +41,7 @@ interface Props {
 
 /** Assets Opal can execute a swap for directly, signed in-app (Solana via
  * Jupiter). Everything else is a rate lookup that finishes on the partner
- * site — kept out of the UI's vocabulary, the app just picks quietly. */
+ * site - kept out of the UI's vocabulary, the app just picks quietly. */
 const JUPITER_ASSETS = ["SOL", "USDC", "USDT"];
 const PARTNER_NAME = "FixedFloat";
 

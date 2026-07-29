@@ -11,7 +11,7 @@ type Props = {
   as?: Tag;
   /**
    * Identity for this readout (portfolio id, screen, asset, …).
-   * When it changes, jump immediately — no count-up across navigation.
+   * When it changes, jump immediately - no count-up across navigation.
    */
   snapKey?: string | number | boolean | null;
 };

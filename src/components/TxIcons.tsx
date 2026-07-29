@@ -39,7 +39,7 @@ function Hex({
   );
 }
 
-/** Sent — uses app loss/negative red. */
+/** Sent - uses app loss/negative red. */
 export function TxIconSent({ size = 32, className }: Props) {
   return (
     <Hex size={size} className={className} fill="#f87171">
@@ -49,7 +49,7 @@ export function TxIconSent({ size = 32, className }: Props) {
   );
 }
 
-/** Received — uses app profit/positive green. */
+/** Received - uses app profit/positive green. */
 export function TxIconReceived({ size = 32, className }: Props) {
   return (
     <Hex size={size} className={className} fill="#34d399">
@@ -59,7 +59,7 @@ export function TxIconReceived({ size = 32, className }: Props) {
   );
 }
 
-/** Self-transfer — muted stone. */
+/** Self-transfer - muted stone. */
 export function TxIconSelf({ size = 32, className }: Props) {
   return (
     <Hex size={size} className={className} fill="#8a857e">

@@ -1,4 +1,4 @@
-//! Monero ↔ Trezor wire helpers: SignTx (501–518) + LiveRefresh (552–557).
+//! Monero ↔ Trezor wire helpers: SignTx (501-518) + LiveRefresh (552-557).
 //! Spend key never leaves the device; host only supplies construction data.
 
 use crate::error::OpalError;
@@ -198,7 +198,7 @@ fn encode_init(req: &MoneroSignRequest, address_n: &[u32]) -> Vec<u8> {
 /// Run LiveRefresh for a batch of received outputs so watch-only balances
 /// drop spent outs correctly. Returns encrypted KI blobs (salt + ciphertext)
 /// for `import_key_images` after host-side decrypt with the view key is done
-/// by wallet-rpc when we pass pre-formed key image hex — see `xmr_send`.
+/// by wallet-rpc when we pass pre-formed key image hex - see `xmr_send`.
 pub fn trezor_monero_live_refresh(
     path: &str,
     transfers: &[(Vec<u8>, Vec<u8>, u64, u32, u32)],
@@ -326,7 +326,7 @@ fn sign_on_session(
         });
     }
 
-    // Sort by key-image (first 32 bytes of vini after tag) — firmware expects
+    // Sort by key-image (first 32 bytes of vini after tag) - firmware expects
     // InputVini in KI order. Heuristic: sort by vini bytes.
     sealed.sort_by(|a, b| a.vini.cmp(&b.vini));
 

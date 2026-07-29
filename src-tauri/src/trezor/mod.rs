@@ -40,7 +40,7 @@ pub(crate) trait Transport {
 // running the standalone installer.
 const BRIDGE_PORTS: [u16; 2] = [21328, 21325];
 // Some setups only bind Bridge's HTTP listener on the IPv6 loopback interface,
-// which "localhost" resolves to but a hardcoded 127.0.0.1 does not — try both
+// which "localhost" resolves to but a hardcoded 127.0.0.1 does not - try both
 // and remember whichever one actually answers.
 const BRIDGE_HOSTS: [&str; 2] = ["127.0.0.1", "localhost"];
 // Both the legacy and current bridge accept any *.trezor.io origin (checked via
@@ -76,7 +76,7 @@ fn mark_bridge_up() {
 }
 
 /// All (host, port) combinations worth probing, active endpoint first.
-/// Prefer `127.0.0.1` over `localhost` — on Windows, `localhost`→`::1` often
+/// Prefer `127.0.0.1` over `localhost` - on Windows, `localhost`→`::1` often
 /// hangs for the full request timeout when nothing is listening on IPv6.
 fn bridge_candidates() -> Vec<(&'static str, u16)> {
     let active = *ACTIVE_ENDPOINT.lock();
@@ -184,7 +184,7 @@ struct AcquireResponse {
 pub fn probe_trezor() -> TrezorStatus {
     let session_active = SESSION_ACTIVE.load(Ordering::SeqCst);
 
-    // Fast path when Bridge was recently unreachable — don't burn ~15s on
+    // Fast path when Bridge was recently unreachable - don't burn ~15s on
     // localhost/IPv6 hangs every status poll.
     if !bridge_marked_down() {
         if let Ok(client) = http_client_probe() {
@@ -217,7 +217,7 @@ pub fn probe_trezor() -> TrezorStatus {
         }
     }
 
-    // Bridge down / skipped — report USB presence without opening the device.
+    // Bridge down / skipped - report USB presence without opening the device.
     if let Some(status) = usb::probe_status(session_active) {
         return status;
     }
@@ -591,7 +591,7 @@ pub(crate) fn with_session<T>(
                         return with_bridge_devices(&client, &devices, f);
                     }
                 }
-                // Bridge is up but sees no device — don't fight it over WinUSB.
+                // Bridge is up but sees no device - don't fight it over WinUSB.
                 if usb::device_present() {
                     return Err(OpalError::InvalidInput(
                         "Trezor is plugged in but Suite/Bridge hasn't unlocked it yet. Unlock the device in Trezor Suite, then retry."
@@ -607,7 +607,7 @@ pub(crate) fn with_session<T>(
         }
     }
 
-    // Bridge unavailable — talk to the device over native USB.
+    // Bridge unavailable - talk to the device over native USB.
     if usb::device_present() {
         let mut session = usb::UsbSession::open()?;
         // Soft init: discovery historically ignored Initialize failures and
@@ -644,7 +644,7 @@ fn with_bridge_devices<T>(
     let mut session = match TrezorSession::acquire(client, &device.path, previous) {
         Ok(s) => s,
         Err(first) if device.session.is_some() => {
-            // Steal failed — wait briefly and retry once against a free slot.
+            // Steal failed - wait briefly and retry once against a free slot.
             std::thread::sleep(Duration::from_millis(180));
             let refreshed = enumerate(client).unwrap_or_else(|_| devices.to_vec());
             let free = refreshed
@@ -699,7 +699,7 @@ impl TrezorSession {
             session: parsed.session,
             released: AtomicBool::new(false),
         };
-        // Soft init — Features response clears session state on device.
+        // Soft init - Features response clears session state on device.
         match call_until(&mut session, MSG_INITIALIZE, &[], &[MSG_FEATURES]) {
             Ok((_, payload)) => {
                 usb::cache_features(
@@ -842,7 +842,7 @@ fn http_client(timeout: Duration) -> Result<reqwest::blocking::Client, OpalError
     reqwest::blocking::Client::builder()
         .timeout(timeout)
         .connect_timeout(Duration::from_millis(800))
-        // Bridge only ever lives on loopback — never route it through a system/VPN
+        // Bridge only ever lives on loopback - never route it through a system/VPN
         // proxy, which would otherwise silently break detection on machines that
         // have HTTP_PROXY/HTTPS_PROXY set.
         .no_proxy()
@@ -862,7 +862,7 @@ fn http_client_probe() -> Result<reqwest::blocking::Client, OpalError> {
 
 fn bridge_version(client: &reqwest::blocking::Client) -> Result<Value, OpalError> {
     // Try the endpoint we last had success with first, then fall back through
-    // every (host, port) combination — this recovers from both the IPv4/IPv6
+    // every (host, port) combination - this recovers from both the IPv4/IPv6
     // loopback mismatch and the 21328-vs-21325 port change without the
     // caller needing to care which one is actually running.
     let mut last_err: Option<OpalError> = None;
@@ -1043,7 +1043,7 @@ fn proto_parse(data: &[u8]) -> Result<Vec<(u32, ProtoValue)>, OpalError> {
                 i = end;
             }
             5 => {
-                // 32-bit — skip
+                // 32-bit - skip
                 if i + 4 > data.len() {
                     return Err(OpalError::Io("protobuf fixed32 truncated".into()));
                 }
@@ -1307,7 +1307,7 @@ mod tests {
         assert_eq!(parse_script_type("p2tr").unwrap(), 5);
     }
 
-    /// Needs a real device plugged in — not run by default.
+    /// Needs a real device plugged in - not run by default.
     /// `cargo test --lib trezor::tests::probe_real_device -- --ignored --nocapture`
     #[test]
     #[ignore]

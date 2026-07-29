@@ -5,7 +5,7 @@ import {
   subscribePriceCache,
 } from "../lib/balances";
 
-/** Live spot map for the selected display currency — updates when cache warms. */
+/** Live spot map for the selected display currency - updates when cache warms. */
 export function useFiatPrices(fiat: string): Record<string, number> {
   const [tick, setTick] = useState(getPriceCacheVersion());
 

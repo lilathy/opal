@@ -178,7 +178,7 @@ export function CreateVaultScreen() {
       }
       goToStep(intent === "restore" ? "phrase" : "words");
     } catch {
-      /* errorCode set in provider — roll back the optimistic session flag */
+      /* errorCode set in provider - roll back the optimistic session flag */
       writeSetupSession({ intent, step: "security", vaultCreated: false });
       setVaultCreated(false);
     } finally {

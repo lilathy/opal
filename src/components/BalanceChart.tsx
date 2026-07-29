@@ -61,7 +61,7 @@ type Props = {
   /**
    * Balance-history mode:
    * - `undefined` → pure asset-price chart
-   * - `null` → wallet history still loading (show loading — never a fake series)
+   * - `null` → wallet history still loading (show loading - never a fake series)
    * - `LedgerEvent[]` → reconstruct from real txs
    */
   ledger?: LedgerEvent[] | null;
@@ -116,7 +116,7 @@ function chartsCacheKey(ids: string[], fiat: string, days: number): string {
   return `${[...ids].sort().join(",")}|${fiat.toLowerCase()}|${days}`;
 }
 
-/** Shape key — period/fiat/coins/ledger. Amounts are patched on top. */
+/** Shape key - period/fiat/coins/ledger. Amounts are patched on top. */
 function seriesShapeKey(
   coinKey: string,
   fiat: string,
@@ -156,7 +156,7 @@ function patchSeriesTip(
   const out = prev.slice();
   const last = out[out.length - 1];
   // Reject tip jumps that look like incomplete-history spikes (near-zero
-  // path then full balance) — only in growth mode.
+  // path then full balance) - only in growth mode.
   if (useHistory) {
     const median = (() => {
       const vals = out.slice(0, -1).map((p) => p.v).sort((a, b) => a - b);
@@ -291,7 +291,7 @@ export function BalanceChart({
     }
   }, [hasHoldings, coinKey]);
 
-  // Fetch price history only when the price key changes — never on every balance tick.
+  // Fetch price history only when the price key changes - never on every balance tick.
   useEffect(() => {
     if (blockPaint && !coinKey) return;
     const ids = priceKey.split("|")[0];
@@ -341,7 +341,7 @@ export function BalanceChart({
 
   // Build or patch the visible series from cached prices.
   useEffect(() => {
-    // Keep the last good series on screen while ledger is still loading —
+    // Keep the last good series on screen while ledger is still loading -
     // wiping caused a loading flash and made the chart feel broken.
     if (blockPaint) {
       return;
@@ -362,7 +362,7 @@ export function BalanceChart({
     const h = holdingsRef.current;
     const led = ledgerRef.current;
 
-    // Tip-patch only within the same growth/price shape — never across modes.
+    // Tip-patch only within the same growth/price shape - never across modes.
     if (cached && cached.length >= 2) {
       const patched = patchSeriesTip(cached, h, led, charts, effectiveHistory);
       if (patched) {
@@ -413,7 +413,7 @@ export function BalanceChart({
   const change = changeRaw ?? (hasSeries ? 0 : null);
   const changeAbs = changeAbsRaw ?? (hasSeries ? 0 : null);
   const tone = change == null || change >= 0 ? "up" : "down";
-  // blockPaint always wins — never keep a stale SOL-price series visible
+  // blockPaint always wins - never keep a stale SOL-price series visible
   // while growth history is still loading.
   const waiting = blockPaint || ((loading || !pricesReady) && !hasSeries);
   const showStatus = waiting || error || !hasSeries;

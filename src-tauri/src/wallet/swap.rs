@@ -397,7 +397,7 @@ fn quote_from_api_price(
     let rate = data
         .get("rate")
         .and_then(json_num_or_str)
-        .unwrap_or_else(|| "—".into());
+        .unwrap_or_else(|| "-".into());
     let min_amount = data
         .pointer("/from/min")
         .and_then(json_num_or_str)

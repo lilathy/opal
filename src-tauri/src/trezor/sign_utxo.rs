@@ -63,7 +63,7 @@ pub fn trezor_sign_bitcoin_tx(req: &BitcoinSignRequest) -> Result<Vec<u8>, OpalE
         loop {
             let payload = &resp.1;
             let request_type = proto_get_varint(payload, 1).unwrap_or(REQ_TXFINISHED);
-            let details_idx = proto_get_varint(payload, 2); // request_details.request_index nested — flat parse may miss
+            let details_idx = proto_get_varint(payload, 2); // request_details.request_index nested - flat parse may miss
             // TxRequest.details is field 2 (message). Extract request_index (field 1) and tx_hash (field 2).
             let details = proto_get_bytes(payload, 2).unwrap_or_default();
             let req_index = proto_get_varint(&details, 1).unwrap_or(0) as usize;
@@ -95,7 +95,7 @@ pub fn trezor_sign_bitcoin_tx(req: &BitcoinSignRequest) -> Result<Vec<u8>, OpalE
                     encode_tx_output(output)?
                 }
                 REQ_TXEXTRADATA => {
-                    // Prev-tx extradata for legacy non-segwit inputs — we only
+                    // Prev-tx extradata for legacy non-segwit inputs - we only
                     // support segwit spends where this shouldn't be needed.
                     let _ = (extra_len, extra_offset);
                     return Err(OpalError::InvalidInput(

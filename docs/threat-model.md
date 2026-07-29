@@ -21,11 +21,11 @@
 
 ## Adversaries
 
-1. **Offline vault thief** — steals `%AppData%\Opal\vault.opal`. Mitigated by Argon2id + AES-256-GCM; optional wipe after 10 failed unlocks.
-2. **Malicious RPC** — lies about balances or fees. Mitigated by curated public endpoints; verify large sends independently.
-3. **Address poisoning** — lookalike deposits. Mitigated by prefix/suffix emphasis and near-match warnings.
-4. **Clipboard malware** — swaps pasted addresses. Mitigated by short-lived clipboard clear where used.
-5. **Screen capture of seed** — best-effort Windows display affinity; user should clear the desk and use discreet mode when needed.
+1. **Offline vault thief** - steals `%AppData%\Opal\vault.opal`. Mitigated by Argon2id + AES-256-GCM; optional wipe after 10 failed unlocks.
+2. **Malicious RPC** - lies about balances or fees. Mitigated by curated public endpoints; verify large sends independently.
+3. **Address poisoning** - lookalike deposits. Mitigated by prefix/suffix emphasis and near-match warnings.
+4. **Clipboard malware** - swaps pasted addresses. Mitigated by short-lived clipboard clear where used.
+5. **Screen capture of seed** - best-effort Windows display affinity; user should clear the desk and use discreet mode when needed.
 
 ## Non-goals
 

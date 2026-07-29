@@ -1,4 +1,4 @@
-/** Soft UI sounds (Web Audio — no asset files). */
+/** Soft UI sounds (Web Audio - no asset files). */
 
 type ToneOpts = {
   type?: OscillatorType;
@@ -15,7 +15,7 @@ let triangleWave: PeriodicWave | null = null;
 let softClipCurve: Float32Array | null = null;
 let outputBus: GainNode | null = null;
 
-/** Global loudness — bump here to raise every SFX together. */
+/** Global loudness - bump here to raise every SFX together. */
 const MASTER_GAIN = 2.15;
 
 /** Prefer a high, stable render rate when the device allows it. */
@@ -49,7 +49,7 @@ function getCtx(): AudioContext | null {
   }
 }
 
-/** Band-limited triangle — same shape, far less high-frequency aliasing. */
+/** Band-limited triangle - same shape, far less high-frequency aliasing. */
 function getTriangleWave(ctx: AudioContext): PeriodicWave {
   if (triangleWave) return triangleWave;
   // Cap harmonics below Nyquist so high notes stay clean.
@@ -70,7 +70,7 @@ function getTriangleWave(ctx: AudioContext): PeriodicWave {
 function getSoftClipCurve(): Float32Array {
   if (softClipCurve) return softClipCurve;
   const curve = new Float32Array(SOFT_CLIP_SAMPLES);
-  // Gentle tanh ceiling — keeps stacked voices from harsh digital clip.
+  // Gentle tanh ceiling - keeps stacked voices from harsh digital clip.
   const drive = 1.15;
   for (let i = 0; i < SOFT_CLIP_SAMPLES; i++) {
     const x = (i * 2) / (SOFT_CLIP_SAMPLES - 1) - 1;
@@ -170,7 +170,7 @@ function withAudio(
 }
 
 /**
- * Ascending major sparkle — funds received / collected.
+ * Ascending major sparkle - funds received / collected.
  * C6 → E6 → G6.
  */
 export function playIncomingSound(): void {
@@ -223,7 +223,7 @@ export function playIncomingSound(): void {
 }
 
 /**
- * Soft whoosh + settle — soft “didn’t work” without screaming.
+ * Soft whoosh + settle - soft “didn’t work” without screaming.
  */
 export function playErrorSound(): void {
   withAudio((ctx, t, dest) => {
@@ -275,12 +275,12 @@ export function playErrorSound(): void {
 }
 
 /**
- * Light air trail + flat friendly confirm — money sent.
+ * Light air trail + flat friendly confirm - money sent.
  * No mid-range pitch drop (that reads as “took damage”).
  */
 export function playSendSound(): void {
   withAudio((ctx, t, dest) => {
-    // Soft high air only — leaving, not a hit
+    // Soft high air only - leaving, not a hit
     tone(ctx, {
       type: "sine",
       freq: 1500,
@@ -299,7 +299,7 @@ export function playSendSound(): void {
       peak: 0.08,
       dest,
     });
-    // Warm confirm — flat pitch, gentle attack (statement, not pain)
+    // Warm confirm - flat pitch, gentle attack (statement, not pain)
     tone(ctx, {
       type: "sine",
       freq: 1046.5, // C6
@@ -310,7 +310,7 @@ export function playSendSound(): void {
     });
     tone(ctx, {
       type: "sine",
-      freq: 1568, // G6 — soft fifth
+      freq: 1568, // G6 - soft fifth
       start: t + 0.14,
       duration: 0.28,
       peak: 0.22,
@@ -328,7 +328,7 @@ export function playSendSound(): void {
 }
 
 /**
- * Secure lock ping — Trezor plugged in / unlocked.
+ * Secure lock ping - Trezor plugged in / unlocked.
  */
 export function playTrezorConnectedSound(): void {
   withAudio((ctx, t, dest) => {
@@ -371,7 +371,7 @@ export function playTrezorConnectedSound(): void {
 }
 
 /**
- * Two voices meet, then resolve up — trade settled.
+ * Two voices meet, then resolve up - trade settled.
  */
 export function playSwapSound(): void {
   withAudio((ctx, t, dest) => {

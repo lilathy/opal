@@ -142,7 +142,7 @@ pub fn fill_missing_addresses(session: &mut UnlockedVault) -> Result<(), OpalErr
 
 /// Scrapes on-chain amounts for one portfolio without touching prices, so it
 /// can run fully in parallel with the (independent) price book. Returns the
-/// balance alongside a parallel list of market ids — one per asset — used
+/// balance alongside a parallel list of market ids - one per asset - used
 /// to attach fiat once prices are ready.
 fn fetch_one_portfolio_balance_amounts(
     http: &HttpCtx,
@@ -271,7 +271,7 @@ fn fetch_one_portfolio_balance_amounts(
             keys.push(Some("dogecoin"));
         }
         ChainId::Sol => {
-            // Native + tokens in parallel — sequential used to stack ~2.5s waits.
+            // Native + tokens in parallel - sequential used to stack ~2.5s waits.
             // Native RPC failure → omit this portfolio so the UI keeps the last
             // good balance instead of flashing to 0.
             let (native_res, token_accounts) = thread::scope(|scope| {
@@ -422,7 +422,7 @@ fn fetch_one_portfolio_balance_amounts(
     ))
 }
 
-/// Balance fetch against a payload snapshot — safe to call without holding the session lock.
+/// Balance fetch against a payload snapshot - safe to call without holding the session lock.
 /// Portfolios are scraped in parallel so one slow chain doesn't serialize the rest.
 pub fn fetch_balances_for_payload(
     http: &HttpCtx,
@@ -430,7 +430,7 @@ pub fn fetch_balances_for_payload(
     portfolio_id: Option<&str>,
 ) -> Result<Vec<PortfolioBalance>, OpalError> {
     // Always include allowlisted stables (USDC/USDT/DAI/…) even at zero so
-    // the home list, sidebar, and swap picker show them by default — users
+    // the home list, sidebar, and swap picker show them by default - users
     // expect the token row to exist before they've ever held any.
     let include_zero_tokens = true;
     let targets: Vec<&PortfolioRecord> = payload
@@ -444,7 +444,7 @@ pub fn fetch_balances_for_payload(
     }
 
     let mut slots: Vec<Option<PortfolioBalance>> = (0..targets.len()).map(|_| None).collect();
-    // Price holdings in the vault's display fiat — not hard-coded USD.
+    // Price holdings in the vault's display fiat - not hard-coded USD.
     // The AssetBalance.usd field is "fiat value in the selected currency"
     // (legacy name); formatMoney then labels it with the matching code.
     let fiat = {
@@ -456,7 +456,7 @@ pub fn fetch_balances_for_payload(
         }
     };
     thread::scope(|scope| {
-        // Spot fiat from the in-memory exchange book only — never block a
+        // Spot fiat from the in-memory exchange book only - never block a
         // balance scrape on a price network call. Background loop + warm
         // timer keep the book hot (Exodus/Trezor model).
         let prices = http.cached_prices_in_fiat(&fiat);
@@ -484,7 +484,7 @@ pub fn fetch_balances_for_payload(
     Ok(slots.into_iter().flatten().collect())
 }
 
-/// Read previously persisted balance snapshots (instant — no network).
+/// Read previously persisted balance snapshots (instant - no network).
 pub fn cached_balances_from_payload(
     payload: &VaultPayload,
     portfolio_id: Option<&str>,
@@ -574,7 +574,7 @@ pub struct SendResult {
 
 /// Signs and broadcasts a send. Takes an owned snapshot of everything it
 /// needs (portfolio record, mnemonic, passphrase) rather than a locked
-/// session reference — this can involve several sequential network round
+/// session reference - this can involve several sequential network round
 /// trips (fee/UTXO lookups, broadcast), and holding the global session lock
 /// for that whole stretch used to freeze the rest of the app (Settings,
 /// balance refreshes, switching portfolios, …) until the send finished.
@@ -716,7 +716,7 @@ pub fn send_from_portfolio_opts(
         }
         ChainId::Ton => {
             return Err(OpalError::InvalidInput(
-                "TON sending isn't wired up yet — receive and balances work; use TON Keeper to send for now"
+                "TON sending isn't wired up yet - receive and balances work; use TON Keeper to send for now"
                     .into(),
             ));
         }
@@ -856,20 +856,20 @@ fn send_trezor_portfolio(
         ChainId::Sol => {
             if token.is_some_and(|s| !s.eq_ignore_ascii_case("SOL")) {
                 return Err(OpalError::InvalidInput(
-                    "Trezor Solana token sends are not supported yet — send native SOL".into(),
+                    "Trezor Solana token sends are not supported yet - send native SOL".into(),
                 ));
             }
             let path = format!("m/44'/501'/{}'/0'", portfolio.account_index);
             let message = build_sol_native_message(http, from, to, amount, sol_fee)?;
             // Trezor SolanaSignTx expects the full serialized tx in some firmwares,
-            // and the message in others — Suite sends the message bytes as serialized_tx.
+            // and the message in others - Suite sends the message bytes as serialized_tx.
             let sig = trezor_sign_solana_tx(&path, &message)?;
             broadcast_sol_with_signature(http, &sig, &message)
         }
         ChainId::Trx => {
             if token.is_some_and(|s| !s.eq_ignore_ascii_case("TRX")) {
                 return Err(OpalError::InvalidInput(
-                    "Trezor TRC-20 sends are not supported yet — send native TRX".into(),
+                    "Trezor TRC-20 sends are not supported yet - send native TRX".into(),
                 ));
             }
             let path = format!("m/44'/195'/{}'/0/0", portfolio.account_index);
@@ -912,12 +912,12 @@ fn send_trezor_portfolio(
         ChainId::Xmr => {
             let view = portfolio.xmr_view_key.as_ref().ok_or_else(|| {
                 OpalError::InvalidInput(
-                    "Monero Trezor portfolio is missing its watch key — Sync my Trezor again".into(),
+                    "Monero Trezor portfolio is missing its watch key - Sync my Trezor again".into(),
                 )
             })?;
             if !crate::trezor::trezor_monero_supported()? {
                 return Err(OpalError::InvalidInput(
-                    "Monero on Trezor needs a Model T or Safe device — connect and unlock it"
+                    "Monero on Trezor needs a Model T or Safe device - connect and unlock it"
                         .into(),
                 ));
             }

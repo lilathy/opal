@@ -6,7 +6,7 @@ The desktop wallet is the product. A mobile companion is planned later and is no
 
 - Watch balances and receive addresses for portfolios that already exist on desktop
 - Optionally approve or reject spends started on desktop
-- No hot seed on the phone in the first companion design — pair with an encrypted one-time secret
+- No hot seed on the phone in the first companion design - pair with an encrypted one-time secret
 - Same warm-dark visual language as the desktop app
 
 ## Status

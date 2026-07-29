@@ -32,7 +32,7 @@ const SUPPORTED_FIATS: &[&str] = &[
     "usd", "eur", "gbp", "rub", "jpy", "cny", "krw", "brl", "try", "inr",
 ];
 
-/// Background loop — keep the in-memory book hot like Exodus/Trezor.
+/// Background loop - keep the in-memory book hot like Exodus/Trezor.
 /// UI never waits on a free-tier scraper; it only reads `SPOT_CACHE`.
 pub fn start_price_book_loop() {
     std::thread::Builder::new()
@@ -90,7 +90,7 @@ fn binance_usdt_symbol(coin_id: &str) -> Option<&'static str> {
         "solana" => Some("SOLUSDT"),
         "litecoin" => Some("LTCUSDT"),
         "dogecoin" => Some("DOGEUSDT"),
-        // Monero is delisted on Binance.com — XMRUSDT still returns a frozen
+        // Monero is delisted on Binance.com - XMRUSDT still returns a frozen
         // ~$118 ticker and klines ending 2024-02. Use Kraken instead.
         "monero" => None,
         "binancecoin" => Some("BNBUSDT"),
@@ -170,7 +170,7 @@ impl HttpCtx {
     }
 
     fn rpc_url(&self, chain: ChainId) -> String {
-        // Public popular nodes only — no user custom RPC.
+        // Public popular nodes only - no user custom RPC.
         match chain {
             ChainId::Eth => "https://ethereum.publicnode.com".into(),
             ChainId::Arb => "https://arbitrum-one.publicnode.com".into(),
@@ -205,7 +205,7 @@ impl HttpCtx {
             "params": params,
         });
         // Balance path: one attempt. Retries turned every hung public RPC into
-        // a 5–10s stall and stacked across Sol/TRX token legs.
+        // a 5-10s stall and stacked across Sol/TRX token legs.
         let v = self.post_json_once(&url, &body)?;
         if let Some(err) = v.get("error") {
             if !err.is_null() {
@@ -247,17 +247,17 @@ impl HttpCtx {
     /// POST + parse JSON, with a couple of short-backoff retries.
     ///
     /// Public RPC endpoints (Solana's mainnet-beta in particular) throttle
-    /// hard and inconsistently under load — without this, a portfolio's
+    /// hard and inconsistently under load - without this, a portfolio's
     /// token balances would silently come back as "0" on a 429 with no
     /// error surfaced anywhere, which is exactly why token balances used to
     /// look flaky/inconsistent from one wallet (or one refresh) to the next.
     pub fn post_json(&self, url: &str, body: &Value) -> Result<Value, OpalError> {
-        // Two attempts max — a third 5s hang made balance polls feel like
+        // Two attempts max - a third 5s hang made balance polls feel like
         // multi-minute freezes when a public RPC stalled.
         self.post_json_retrying(url, body, 2)
     }
 
-    /// Single-attempt POST — for best-effort per-item lookups (e.g. one row
+    /// Single-attempt POST - for best-effort per-item lookups (e.g. one row
     /// out of a history list) where a slow/failed call should just skip that
     /// row rather than pile up 12s-timeout retries that make a whole list
     /// feel like the app has hung.
@@ -268,7 +268,7 @@ impl HttpCtx {
     /// POST + parse JSON, with a couple of short-backoff retries.
     ///
     /// Public RPC endpoints (Solana's mainnet-beta in particular) throttle
-    /// hard and inconsistently under load — without this, a portfolio's
+    /// hard and inconsistently under load - without this, a portfolio's
     /// token balances would silently come back as "0" on a 429 with no
     /// error surfaced anywhere, which is exactly why token balances used to
     /// look flaky/inconsistent from one wallet (or one refresh) to the next.
@@ -308,7 +308,7 @@ impl HttpCtx {
                 }
             };
             // JSON-RPC endpoints (Solana, EVM) return HTTP 200 with an
-            // `error` field for rate limits / bad requests — don't let that
+            // `error` field for rate limits / bad requests - don't let that
             // silently look like a valid empty result to the caller.
             if let Some(err) = v.get("error") {
                 if !err.is_null() {
@@ -396,7 +396,7 @@ impl HttpCtx {
         u128_from_hex(hex)
     }
 
-    /// Balance-only UTXO chain lookup — skips the UTXO list (send path needs that).
+    /// Balance-only UTXO chain lookup - skips the UTXO list (send path needs that).
     pub fn btc_address_balance(&self, chain: ChainId, address: &str) -> Result<u64, OpalError> {
         match chain {
             ChainId::Btc | ChainId::Ltc => {
@@ -491,7 +491,7 @@ impl HttpCtx {
     }
 
     pub fn sol_balance_lamports(&self, address: &str) -> Result<u64, OpalError> {
-        // Race a few public RPCs — Solscan feels fast because explorers hit
+        // Race a few public RPCs - Solscan feels fast because explorers hit
         // indexed infra; we get closer by taking the first healthy reply.
         const SOL_RPCS: &[&str] = &[
             "https://solana-rpc.publicnode.com",
@@ -546,7 +546,7 @@ impl HttpCtx {
     }
 
     /// Every SPL token account owned by `owner`, mint → raw base-unit total.
-    /// Classic Token program only on the hot path — Token-2022 + mint fallbacks
+    /// Classic Token program only on the hot path - Token-2022 + mint fallbacks
     /// were stacking multi-second RPC waits on every Solana portfolio poll.
     pub fn sol_all_token_balances(&self, owner: &str) -> Result<HashMap<String, u64>, OpalError> {
         const TOKEN_PROGRAM: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
@@ -785,7 +785,7 @@ impl HttpCtx {
         {
             let cache = SPOT_CACHE.lock();
             if let Some(c) = cache.get(vs) {
-                // Hot book — same model as Exodus/Trezor: serve memory, refresh async.
+                // Hot book - same model as Exodus/Trezor: serve memory, refresh async.
                 if c.at.elapsed() < Duration::from_secs(8) {
                     return Ok(c.map.clone());
                 }
@@ -802,7 +802,7 @@ impl HttpCtx {
         Ok(cache.get(vs).map(|c| c.map.clone()).unwrap_or_default())
     }
 
-    /// Instant read of whatever spot map we already have — never hits the
+    /// Instant read of whatever spot map we already have - never hits the
     /// network. Used while scraping on-chain balances so price I/O cannot
     /// stall SOL/ETH balance updates.
     pub fn cached_prices_in_fiat(&self, fiat: &str) -> HashMap<String, f64> {
@@ -860,7 +860,7 @@ impl HttpCtx {
             ("SOLUSDT", "solana"),
             ("LTCUSDT", "litecoin"),
             ("DOGEUSDT", "dogecoin"),
-            // Skip XMRUSDT — delisted on Binance.com but still quotes a frozen price.
+            // Skip XMRUSDT - delisted on Binance.com but still quotes a frozen price.
             ("BNBUSDT", "binancecoin"),
             ("AVAXUSDT", "avalanche-2"),
             ("POLUSDT", "matic-network"),
@@ -903,7 +903,7 @@ impl HttpCtx {
                 }
             }
         }
-        // Stablecoins ≈ $1 — wallets hardcode these.
+        // Stablecoins ≈ $1 - wallets hardcode these.
         out.insert("tether".into(), 1.0);
         out.insert("usd-coin".into(), 1.0);
         out.insert("dai".into(), 1.0);
@@ -1019,7 +1019,7 @@ impl HttpCtx {
         self.refresh_price_book()
     }
 
-    /// Exchange klines (Binance) — timestamps unix seconds, prices in `vs`.
+    /// Exchange klines (Binance) - timestamps unix seconds, prices in `vs`.
     pub fn market_chart(
         &self,
         coin_id: &str,
@@ -1041,7 +1041,7 @@ impl HttpCtx {
         let fx = self.fx_rate_for(&vs);
         let series = match coin_id {
             "tether" | "usd-coin" | "dai" | "xdai" => synthetic_stable_series(days, fx),
-            // Always Kraken for Monero — Binance XMRUSDT klines freeze in Feb 2024.
+            // Always Kraken for Monero - Binance XMRUSDT klines freeze in Feb 2024.
             "monero" => match self.fetch_kraken_xmr_ohlc(days) {
                 Ok(mut pts) => {
                     if (fx - 1.0).abs() > f64::EPSILON {
@@ -1260,7 +1260,7 @@ impl HttpCtx {
     ) -> Result<u128, OpalError> {
         let base = self.tron_base();
         let owner_hex = tron_address_to_hex(owner)?;
-        // ABI: balanceOf(address) — 20-byte address left-padded to 32 bytes (no 0x41 prefix).
+        // ABI: balanceOf(address) - 20-byte address left-padded to 32 bytes (no 0x41 prefix).
         let addr20 = &owner_hex[2..]; // strip leading "41"
         let parameter = format!("{addr20:0>64}");
         let v = self.post_json_once(
@@ -1478,7 +1478,7 @@ impl HttpCtx {
         let mut fee_by_hash: HashMap<String, u128> = HashMap::new();
 
         // Native ETH-like transfers (and contract calls, which show 0 value
-        // but still cost gas — e.g. approvals, the "out" leg of a swap).
+        // but still cost gas - e.g. approvals, the "out" leg of a swap).
         if let Ok(v) = self.get_json(&format!(
             "{base}?module=account&action=txlist&address={address}&sort=desc"
         )) {
@@ -1497,7 +1497,7 @@ impl HttpCtx {
 
                     // Pure contract calls with no native value transferred
                     // (approvals, swap routing, etc.) aren't a useful "0 ETH"
-                    // row on their own — the token-transfer pass below
+                    // row on their own - the token-transfer pass below
                     // covers what actually moved, using the fee recorded
                     // above.
                     if value == 0 && t["input"].as_str().is_some_and(|d| d.len() > 2) {
@@ -1532,7 +1532,7 @@ impl HttpCtx {
             }
         }
 
-        // ERC-20 transfers — separate endpoint, each entry already carries
+        // ERC-20 transfers - separate endpoint, each entry already carries
         // its own token symbol/decimals so USDC/USDT/etc. show correctly
         // instead of as a misleading "0 ETH" row from the list above.
         if let Ok(v) = self.get_json(&format!(
@@ -1583,7 +1583,7 @@ impl HttpCtx {
                 let txid = t["txid"].as_str().unwrap_or("").to_string();
 
                 // A tx is "ours to send" if any input spends from our own
-                // address — mempool.space embeds the previous output (and
+                // address - mempool.space embeds the previous output (and
                 // its owning address) directly on each vin, so no extra
                 // lookups are needed.
                 let our_in: u64 = t["vin"]
@@ -1746,7 +1746,7 @@ impl HttpCtx {
             Err(_) => return Ok(Vec::new()),
         };
 
-        // Recent window for charts — concurrent getTransaction keeps this fast.
+        // Recent window for charts - concurrent getTransaction keeps this fast.
         let sigs: Vec<Value> = sigs.into_iter().take(40).collect();
 
         let mut rows: Vec<Option<TxRow>> = (0..sigs.len()).map(|_| None).collect();
@@ -1799,7 +1799,7 @@ impl HttpCtx {
             }),
         );
 
-        let mut amount = "—".to_string();
+        let mut amount = "-".to_string();
         let mut direction = "unknown".to_string();
         let mut fee: Option<String> = None;
         if let Ok(v) = detail {
@@ -1912,16 +1912,16 @@ fn normalize_unix_secs(n: u64) -> String {
 pub struct TxRow {
     pub txid: String,
     /// Human-readable amount in the asset's native units (already divided by
-    /// decimals) — never a raw satoshi/wei/lamport integer.
+    /// decimals) - never a raw satoshi/wei/lamport integer.
     pub amount: String,
-    /// Ticker shown next to `amount` — usually the chain's native symbol, but
+    /// Ticker shown next to `amount` - usually the chain's native symbol, but
     /// an ERC-20/TRC-20 row carries its own token symbol instead.
     pub symbol: String,
     /// "in" | "out" | "self" | "unknown"
     pub direction: String,
     pub timestamp: String,
     pub status: String,
-    /// Network fee paid, in native units — only set on rows we paid for.
+    /// Network fee paid, in native units - only set on rows we paid for.
     pub fee: Option<String>,
     /// The other side of the transfer (sender when direction=in, recipient
     /// when direction=out), when we're able to determine it cheaply.
@@ -1930,7 +1930,7 @@ pub struct TxRow {
 }
 
 /// Format a raw base-unit integer (satoshis, wei, lamports, …) as a trimmed
-/// human-readable decimal string — avoids float rounding on large values.
+/// human-readable decimal string - avoids float rounding on large values.
 pub fn base_units_to_string(raw: u128, decimals: u32) -> String {
     if decimals == 0 {
         return raw.to_string();
@@ -1954,7 +1954,7 @@ pub fn base_units_to_string(raw: u128, decimals: u32) -> String {
 /// without a live explorer call.
 fn utxo_direction(our_in: u64, our_out: u64, fee: Option<u64>) -> (&'static str, u64, Option<u64>) {
     if our_in > 0 {
-        // We signed at least one input — this is a spend of ours, possibly
+        // We signed at least one input - this is a spend of ours, possibly
         // with change coming back to the same address.
         let net = our_in.saturating_sub(our_out);
         if net == 0 {
@@ -2125,7 +2125,7 @@ mod history_tests {
 
     #[test]
     fn utxo_direction_receiving() {
-        // Nothing of ours was spent — this is money coming in.
+        // Nothing of ours was spent - this is money coming in.
         let (dir, amount, fee) = utxo_direction(0, 50_000, None);
         assert_eq!(dir, "in");
         assert_eq!(amount, 50_000);
@@ -2146,7 +2146,7 @@ mod history_tests {
     #[test]
     fn utxo_direction_pure_consolidation_shows_only_the_fee() {
         // All inputs are ours and all outputs come back to the same
-        // address (a UTXO consolidation) — only the fee actually left,
+        // address (a UTXO consolidation) - only the fee actually left,
         // net of change, so it should show as a tiny "out" of just the fee
         // rather than the full input amount.
         let (dir, amount, fee) = utxo_direction(100_000, 99_800, Some(200));

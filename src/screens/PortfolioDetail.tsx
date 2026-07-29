@@ -263,7 +263,7 @@ export function PortfolioDetail({
         onBalanceChange?.(next);
       }
     } catch {
-      // Best-effort — keep whatever cached/prop balance we already have.
+      // Best-effort - keep whatever cached/prop balance we already have.
     } finally {
       if (!isCancelled?.()) setBalanceLoading(false);
       void started;
@@ -271,7 +271,7 @@ export function PortfolioDetail({
   }
 
   // One scrape on open. Ongoing updates come from Shell's poll via balanceProp
-  // — a second 1.5s loop here was doubling RPC load on the same portfolio.
+  // - a second 1.5s loop here was doubling RPC load on the same portfolio.
   useEffect(() => {
     let cancelled = false;
     void refreshLiveBalance(() => cancelled);
@@ -305,7 +305,7 @@ export function PortfolioDetail({
     };
   }, [tab, portfolio.id]);
 
-  // Draws (or redraws) the styled QR into the container — a plain effect
+  // Draws (or redraws) the styled QR into the container - a plain effect
   // rather than an imperative library ref, so it survives the receive tab
   // unmounting/remounting (e.g. tab switches) and address refreshes alike.
   useEffect(() => {
@@ -331,7 +331,7 @@ export function PortfolioDetail({
     };
   }, [tab, qrUri]);
 
-  // Fetch history as soon as the portfolio opens — the growth chart needs
+  // Fetch history as soon as the portfolio opens - the growth chart needs
   // real txs to reconstruct balances over time (not just the History tab).
   useEffect(() => {
     let cancelled = false;
@@ -350,7 +350,7 @@ export function PortfolioDetail({
         if (!cancelled) {
           showHistoryError(parseInvokeError(e).message);
           // Empty ledger still tells the chart "history loaded; don't fake
-          // a week of holdings" — better a flat-from-zero than a lie.
+          // a week of holdings" - better a flat-from-zero than a lie.
           if (!cached) setHistory([]);
         }
       } finally {
@@ -374,7 +374,7 @@ export function PortfolioDetail({
             ? api.portfolioEstimateFee(portfolio.id, feePreset).catch(() => null)
             : Promise.resolve(null),
           // Scoped (not the shared list) fetch, which includes zero-balance
-          // allowlisted tokens (DAI, USDC, USDT, …) — otherwise a token
+          // allowlisted tokens (DAI, USDC, USDT, …) - otherwise a token
           // you've never held would never appear as something to pick here.
           api.portfolioBalances(portfolio.id).catch(() => [] as PortfolioBalance[]),
         ]);
@@ -473,7 +473,7 @@ export function PortfolioDetail({
     }
   }
 
-  // The asset actually being sent — native chain symbol, or a picked token.
+  // The asset actually being sent - native chain symbol, or a picked token.
   const selectedSymbol = token || symbol;
 
   const selectedBalance = useMemo(
@@ -492,7 +492,7 @@ export function PortfolioDetail({
       }
     }
     // Zero-balance (or newly-created) portfolios have nothing to derive a
-    // rate from above — fall back to the live spot feed, keyed by CoinGecko
+    // rate from above - fall back to the live spot feed, keyed by CoinGecko
     // id (what `api.pricesFiat()` actually returns), not by raw chain/ticker
     // strings which never matched those keys.
     const coinId = coinIdForSymbol(selectedSymbol) ?? coinIdForChain(portfolio.chain);
@@ -620,7 +620,7 @@ export function PortfolioDetail({
         feePreset: utxo || portfolio.chain.toLowerCase() === "sol" ? feePreset : null,
         sendMax: sendMax && !token ? true : null,
       });
-      // Instant client-side debit — don't wait for RPC scrape to show the spend.
+      // Instant client-side debit - don't wait for RPC scrape to show the spend.
       if (balance && Number.isFinite(sendAmt) && sendAmt > 0) {
         const feeNative = !token ? nativeFeeReserve : 0;
         const next = applyOptimisticSpend(balance, {
@@ -650,7 +650,7 @@ export function PortfolioDetail({
       invalidatePortfolioHistory(portfolio.id);
       invalidateOverviewLedger();
       void loadHistory();
-      // Refresh portfolio list/history, but skip an immediate live scrape —
+      // Refresh portfolio list/history, but skip an immediate live scrape -
       // RPC often still returns the pre-send balance and desyncs the sidebar.
       void onChanged({ reloadBalances: false });
       window.setTimeout(() => {

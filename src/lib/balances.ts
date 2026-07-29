@@ -24,7 +24,7 @@ export function getPriceCacheVersion(): number {
   return priceCacheVersion;
 }
 
-/** Guaranteed array — cached JSON / partial RPC payloads sometimes omit it. */
+/** Guaranteed array - cached JSON / partial RPC payloads sometimes omit it. */
 export function assetsOf(bal: PortfolioBalance | null | undefined): AssetBalance[] {
   const a = bal?.assets;
   return Array.isArray(a) ? a : [];
@@ -71,7 +71,7 @@ function scalePriceMap(
 }
 
 /**
- * Resolve spot prices for a fiat — direct cache, or synthesize from any cached
+ * Resolve spot prices for a fiat - direct cache, or synthesize from any cached
  * fiat via BTC cross-rate so first switch never waits on network.
  */
 export function resolvePricesForFiat(fiat: string): Record<string, number> {
@@ -155,7 +155,7 @@ export function balanceIsRicher(a: PortfolioBalance, b: PortfolioBalance): boole
   return fiatSum(b) > fiatSum(a);
 }
 
-/** Merge balance rows — never let stale zeros overwrite a fresher non-zero row. */
+/** Merge balance rows - never let stale zeros overwrite a fresher non-zero row. */
 export function mergeBalances(
   prev: PortfolioBalance[],
   incoming: PortfolioBalance[],
@@ -180,7 +180,7 @@ export function mergeBalances(
   return [...map.values()];
 }
 
-/** Always apply a live scrape — amounts can go up or down. */
+/** Always apply a live scrape - amounts can go up or down. */
 export function applyLiveBalances(
   prev: PortfolioBalance[],
   incoming: PortfolioBalance[],
@@ -192,7 +192,7 @@ export function applyLiveBalances(
   for (const b of clean) {
     const existing = map.get(b.portfolio_id);
     // Failed / timed-out scrapes often arrive as empty assets OR a single
-    // native row at "0". Never let those wipe a known non-zero balance —
+    // native row at "0". Never let those wipe a known non-zero balance -
     // except after an optimistic spend (user intentionally emptied).
     if (
       existing &&

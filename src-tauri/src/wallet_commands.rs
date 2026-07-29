@@ -138,7 +138,7 @@ pub fn wallet_create_seed(
     let unlocked = session.as_mut().ok_or_else(|| map_err(OpalError::Locked))?;
     if unlocked.payload.seed_mnemonic.is_some() {
         return Err(map_err(OpalError::InvalidInput(
-            "seed already exists — restore only into a new vault".into(),
+            "seed already exists - restore only into a new vault".into(),
         )));
     }
     unlocked.payload.seed_mnemonic = Some(phrase.mnemonic.clone());
@@ -165,7 +165,7 @@ pub fn wallet_restore_seed(
     let unlocked = session.as_mut().ok_or_else(|| map_err(OpalError::Locked))?;
     if unlocked.payload.seed_mnemonic.is_some() {
         return Err(map_err(OpalError::InvalidInput(
-            "seed already exists — wipe the vault before recovering a different seed".into(),
+            "seed already exists - wipe the vault before recovering a different seed".into(),
         )));
     }
     unlocked.payload.seed_mnemonic = Some(m.to_string());
@@ -278,7 +278,7 @@ pub async fn portfolio_create(
         }
     };
 
-    // In-memory only, no I/O — fine to check with a short-lived lock.
+    // In-memory only, no I/O - fine to check with a short-lived lock.
     if kind == PortfolioKind::Software {
         let session = state.session.lock();
         let unlocked = session.as_ref().ok_or_else(|| map_err(OpalError::Locked))?;
@@ -317,7 +317,7 @@ pub async fn portfolio_create(
 
     if kind == PortfolioKind::Trezor {
         // Blocking Bridge I/O + waiting on a physical button press on the
-        // device — must run off the main thread or the whole app freezes
+        // device - must run off the main thread or the whole app freezes
         // until the user confirms (or it times out).
         let verify = request.verify_on_device.unwrap_or(true);
         let account = request.account_index.unwrap_or(0);
@@ -334,7 +334,7 @@ pub async fn portfolio_create(
                 return Ok(existing);
             }
             // Always silent-derive (same reliable path as Sync). On-device confirm
-            // is the separate "Verify on Trezor now" button — tying Save to a
+            // is the separate "Verify on Trezor now" button - tying Save to a
             // ButtonRequest was hanging/failing create with usb write Cancelled.
             let _ = verify;
             let fetched = fetch_trezor_address(chain, account, address_type.as_deref(), false)?;
@@ -441,7 +441,7 @@ pub struct ReorderPortfoliosRequest {
 
 /// Persist a drag-and-drop reorder. The vault's `portfolios` array order *is*
 /// the display order (`portfolio_list` returns it as-stored), so this saves
-/// straight into the encrypted vault rather than browser local storage —
+/// straight into the encrypted vault rather than browser local storage -
 /// survives reinstalls/backups and isn't tied to the webview's storage.
 #[tauri::command]
 pub fn portfolio_reorder(
@@ -505,7 +505,7 @@ pub async fn portfolio_balances(
         let bals =
             fetch_balances_for_payload(&http, &payload, portfolio_id.as_deref()).map_err(map_err)?;
 
-        // Debounce vault writes — persisting on every 3s poll was locking the
+        // Debounce vault writes - persisting on every 3s poll was locking the
         // session and making the next scrape wait on disk I/O.
         {
             use std::sync::atomic::{AtomicU64, Ordering};
@@ -729,7 +729,7 @@ pub async fn warm_spot_prices(app: AppHandle) -> Result<serde_json::Value, Strin
     .await
 }
 
-/// Instant read of cached spot maps — no network, no worker queue wait.
+/// Instant read of cached spot maps - no network, no worker queue wait.
 #[tauri::command]
 pub fn spot_prices_snapshot(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     require_unlocked(&state)?;
@@ -783,7 +783,7 @@ pub async fn price_history(
 
 #[tauri::command]
 pub async fn trezor_status() -> trezor::TrezorStatus {
-    // Sync commands run on the webview's main thread in Tauri — probe_trezor()
+    // Sync commands run on the webview's main thread in Tauri - probe_trezor()
     // does blocking network I/O, so it must be pushed onto a worker thread or
     // this (polled every few seconds by the UI) periodically freezes the app.
     tauri::async_runtime::spawn_blocking(trezor::probe_trezor)
@@ -869,7 +869,7 @@ pub struct TrezorVerifyRequest {
 #[tauri::command]
 pub async fn trezor_verify_address(request: TrezorVerifyRequest) -> Result<String, String> {
     // Same reasoning as trezor_status: this blocks on Bridge + on-device button
-    // confirmation, which can take a while — keep it off the main thread.
+    // confirmation, which can take a while - keep it off the main thread.
     tauri::async_runtime::spawn_blocking(move || {
         let chain = ChainId::parse(&request.chain).map_err(map_err)?;
         let account = request.account_index.unwrap_or(0);
@@ -1183,7 +1183,7 @@ pub async fn portfolio_rescan(
 
         // Snapshot what's needed, then release the session lock before doing
         // any network I/O. Gap discovery alone can make up to 20 sequential
-        // RPC calls — holding the global lock for that whole stretch used to
+        // RPC calls - holding the global lock for that whole stretch used to
         // freeze every other command (Settings, balances, …) in the meantime.
         let (http, mnemonic, passphrase, snapshot) = {
             let mut session = state.session.lock();
@@ -1292,7 +1292,7 @@ pub async fn portfolio_bump_fee(
     on_worker(move || {
         let state = app.state::<AppState>();
         require_unlocked(&state)?;
-        // Snapshot then unlock before broadcasting — RBF bumps hit the
+        // Snapshot then unlock before broadcasting - RBF bumps hit the
         // network just like a normal send and must not hold the global
         // session lock while doing so.
         let (http, p, mnemonic, pass) = {
@@ -1675,7 +1675,7 @@ fn is_native_asset(symbol: &str, chain: &str) -> bool {
 }
 
 /// Create a FixedFloat order and immediately send the deposit from the source
-/// portfolio — one-click automated swap.
+/// portfolio - one-click automated swap.
 #[tauri::command]
 pub async fn swap_fixedfloat_execute(
     app: AppHandle,

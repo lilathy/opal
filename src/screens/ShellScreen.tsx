@@ -104,7 +104,7 @@ function portfolioAssets(bal: PortfolioBalance | undefined): AssetBalance[] {
   return assetsOf(bal);
 }
 
-/** Native gas/ticker for a chain — excluded from nested token lists. */
+/** Native gas/ticker for a chain - excluded from nested token lists. */
 function nativeSymbolForChain(chain: string): string {
   switch (chain.toLowerCase()) {
     case "btc":
@@ -242,7 +242,7 @@ export function ShellScreen() {
     setExpandedSidebar((prev) => ({ ...prev, [id]: !prev[id] }));
   }
 
-  // Incomplete seed setup after an interrupted session — resume backup only.
+  // Incomplete seed setup after an interrupted session - resume backup only.
   const seedReady = Boolean(status?.has_seed && status?.seed_backed_up);
   useEffect(() => {
     if (seedReady) {
@@ -259,7 +259,7 @@ export function ShellScreen() {
   }, [seedReady, status, view]);
 
   // Keep the in-memory drag order in sync with whatever portfolios actually
-  // exist — new ones append at the end, removed ones drop out. Prefer vault
+  // exist - new ones append at the end, removed ones drop out. Prefer vault
   // order when we have no local preference yet. If localStorage still holds
   // a pre-vault reorder, push it into the vault once so it survives reinstall.
   const migratedOrderToVault = useRef(false);
@@ -350,7 +350,7 @@ export function ShellScreen() {
     // Guard against Enter + blur both firing for the same edit.
     if (renameCommitInFlight.current === id) return;
     renameCommitInFlight.current = id;
-    // Always read from the ref — blur can fire after a re-render where a
+    // Always read from the ref - blur can fire after a re-render where a
     // stale closure still sees the pre-keystroke draft.
     const next = renameDraftRef.current.trim();
     const current = portfolios.find((p) => p.id === id);
@@ -549,7 +549,7 @@ export function ShellScreen() {
     try {
       setTrezorStatus(await api.trezorStatus());
     } catch {
-      // Best-effort — the widget just shows "not detected" on failure.
+      // Best-effort - the widget just shows "not detected" on failure.
     }
   }
 
@@ -629,17 +629,17 @@ export function ShellScreen() {
             }),
           });
         }
-        // Background KI sync for watch-only XMR — does not block scrapes when offline.
+        // Background KI sync for watch-only XMR - does not block scrapes when offline.
         const hasXmrTrezor =
           created.some((p) => p.chain === "xmr") ||
           portfolios.some((p) => p.kind === "trezor" && p.chain === "xmr");
         if (hasXmrTrezor && !cancelled) {
           void api.trezorSyncXmrKeyImages().catch(() => {
-            /* device busy / user cancelled confirm — next reconnect retries */
+            /* device busy / user cancelled confirm - next reconnect retries */
           });
         }
       } catch {
-        // Device may still be unlocking — clear so the next status poll retries.
+        // Device may still be unlocking - clear so the next status poll retries.
         if (!cancelled) trezorLastSyncedKey.current = null;
       } finally {
         trezorSyncInFlight.current = false;
@@ -761,7 +761,7 @@ export function ShellScreen() {
       setTxLedger(null);
     }
 
-    // Prefetch default 7D prices while history loads — chart paints the
+    // Prefetch default 7D prices while history loads - chart paints the
     // moment the first ledger chunk arrives.
     const ids = [
       ...new Set(
@@ -822,7 +822,7 @@ export function ShellScreen() {
         }),
       );
       if (cancelled) return;
-      // Still nothing after a full pass — empty chart, not infinite spinner.
+      // Still nothing after a full pass - empty chart, not infinite spinner.
       if (!merged.length) setTxLedger([]);
       publishActivity();
       setRecentLoading(false);

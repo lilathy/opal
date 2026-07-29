@@ -1,4 +1,4 @@
-//! Native USB transport for Trezor devices — talks to the device directly
+//! Native USB transport for Trezor devices - talks to the device directly
 //! over WinUSB/libusb-style bulk transfers, the same way Trezor Suite does
 //! when it isn't using Bridge. No separate service needs to be installed or
 //! running for this path to work.
@@ -8,7 +8,7 @@
 //! (`packages/transport-common/src/constants.ts` and
 //! `packages/protocol/src/protocol-v1/{constants,encode}.ts`), not guessed.
 //!
-//! Prefer Bridge (`with_session`) when Suite/trezord is running — fighting it
+//! Prefer Bridge (`with_session`) when Suite/trezord is running - fighting it
 //! for the WinUSB handle produces Windows error 5 and `usb write: Cancelled`.
 
 use std::sync::atomic::Ordering;
@@ -128,7 +128,7 @@ impl UsbSession {
         })?;
         let interface = device.claim_interface(USB_INTERFACE).wait().map_err(|e| {
             OpalError::Io(format!(
-                "usb claim interface: {e} (device busy — close Trezor Suite or retry)"
+                "usb claim interface: {e} (device busy - close Trezor Suite or retry)"
             ))
         })?;
         let ep_out = interface
@@ -193,7 +193,7 @@ impl UsbSession {
     }
 
     fn read_chunk(&mut self) -> Result<[u8; CHUNK_SIZE], OpalError> {
-        // One long wait — do not slice/cancel/retry. Cancelling an IN transfer
+        // One long wait - do not slice/cancel/retry. Cancelling an IN transfer
         // on Windows can discard a reply the device already sent (ButtonAck).
         let completion = self
             .ep_in
@@ -215,7 +215,7 @@ impl UsbSession {
             out.copy_from_slice(&buffer[..CHUNK_SIZE]);
             return Ok(out);
         }
-        // Spurious zero-length interrupt completion — retry once quickly.
+        // Spurious zero-length interrupt completion - retry once quickly.
         if actual_len == 0 {
             let completion = self
                 .ep_in
@@ -291,7 +291,7 @@ impl Transport for UsbSession {
     }
 }
 
-/// Soft status check — **never opens the USB device**. Opening on every UI
+/// Soft status check - **never opens the USB device**. Opening on every UI
 /// poll was hanging for 15s (`usb write: Cancelled`) and blocking verify/send.
 /// Returns `None` when no USB Trezor is present so the caller can fall back
 /// to Bridge.

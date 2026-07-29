@@ -124,7 +124,7 @@ pub fn analyze_address_safety(
         ok = false;
     }
 
-    // Homoglyph / lookalike characters (advisory — does not flip ok by itself)
+    // Homoglyph / lookalike characters (advisory - does not flip ok by itself)
     if to.chars().any(|c| {
         matches!(
             c,
@@ -152,7 +152,7 @@ pub fn analyze_address_safety(
             ));
         } else if same_prefix && !same_suffix {
             warnings.push(
-                "Shares prefix with a known address but different ending — check carefully".into(),
+                "Shares prefix with a known address but different ending - check carefully".into(),
             );
         }
     }
@@ -190,7 +190,7 @@ pub fn validate_address_for_chain(chain: ChainId, address: &str) -> Result<(), O
                     return Err(OpalError::InvalidInput("not a Bitcoin address".into()));
                 }
             } else if a.starts_with('1') || a.starts_with('3') {
-                // Legacy / P2SH base58 — typically 26–35 chars
+                // Legacy / P2SH base58 - typically 26-35 chars
                 if a.len() < 26 || a.len() > 35 || !is_base58(a) {
                     return Err(OpalError::InvalidInput("not a Bitcoin address".into()));
                 }

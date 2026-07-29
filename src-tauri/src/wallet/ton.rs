@@ -14,7 +14,7 @@ const WALLET_V4R2_CODE_HASH: [u8; 32] = [
     0x84, 0x67, 0x89, 0xfb, 0x4a, 0xe5, 0x80, 0xc8, 0x78, 0x86, 0x6d, 0x95, 0x9d, 0xab, 0xd5, 0xc0,
 ];
 
-/// `code.depth()` for the V4R2 code BOC — the code cell has child refs, so
+/// `code.depth()` for the V4R2 code BOC - the code cell has child refs, so
 /// depth is 7 (not 0). StateInit's representation hash includes this.
 const WALLET_V4R2_CODE_DEPTH: u16 = 7;
 
@@ -77,7 +77,7 @@ impl CellBuilder {
         repr.push(d1);
         repr.push(d2);
         repr.extend_from_slice(&data_bytes);
-        // Depths first (uint16 BE), then hashes — @ton/core getRepr order.
+        // Depths first (uint16 BE), then hashes - @ton/core getRepr order.
         for (_, depth) in &self.refs {
             repr.push((depth >> 8) as u8);
             repr.push((depth & 0xff) as u8);

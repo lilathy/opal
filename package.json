@@ -4,7 +4,7 @@
   "version": "0.1.1",
   "type": "module",
   "license": "MIT",
-  "description": "Opal — quiet self-custody desktop wallet",
+  "description": "Opal - hybrid self-custody desktop wallet (software + Trezor + watch-only)",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",

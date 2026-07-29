@@ -13,7 +13,7 @@ type Props = {
 };
 
 /** Compact +/- number control that replaces the browser's native `<input
- * type="number">` spinner arrows — those render with the OS's own theme
+ * type="number">` spinner arrows - those render with the OS's own theme
  * (a tiny grey up/down stack) that clashes with the rest of the app's
  * flat, dark, custom-drawn controls. */
 export function NumberStepper({

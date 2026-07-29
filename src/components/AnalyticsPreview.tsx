@@ -326,7 +326,7 @@ export function AnalyticsPanel({
   );
   const sparkValues = useMemo(() => downsampleSpark(series7, 20), [series7]);
   const waiting = pricesLoading && series30.length < 2;
-  const dash = discreet ? "••••" : "—";
+  const dash = discreet ? "••••" : "-";
 
   const tiles: Tile[] = [
     {

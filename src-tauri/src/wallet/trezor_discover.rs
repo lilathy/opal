@@ -183,7 +183,7 @@ pub fn discover_trezor_portfolios(
         return Err(OpalError::InvalidInput(
             status
                 .message
-                .if_empty("No Trezor connected — plug in and unlock your device"),
+                .if_empty("No Trezor connected - plug in and unlock your device"),
         ));
     }
     let label = status
@@ -287,7 +287,7 @@ pub fn discover_trezor_portfolios(
                     let before = payload.portfolios.len();
                     push_trezor_record(payload, &probe, label.clone(), &mut created);
                     if quiet && payload.portfolios.len() == before {
-                        // Already present — not a "new" find.
+                        // Already present - not a "new" find.
                     }
                 }
             }

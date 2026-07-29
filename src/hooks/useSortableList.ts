@@ -129,7 +129,7 @@ export function useSortableList({
     onDragEndRef.current?.();
   }, [containerRef, itemSelector]);
 
-  /** Attach to each sortable row — must live on the same element that captures the pointer. */
+  /** Attach to each sortable row - must live on the same element that captures the pointer. */
   const rowPointerMove = useCallback(
     (e: ReactPointerEvent<HTMLElement>) => {
       const drag = dragState.current;

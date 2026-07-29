@@ -184,7 +184,7 @@ export function TxHistory({
                   const pending = isPendingStatus(h.status);
                   const failed = isFailedStatus(h.status);
                   const dir = normalizeDir(h.direction);
-                  const known = h.amount !== "—";
+                  const known = h.amount !== "-";
                   const counterpartyLabel =
                     dir === "in"
                       ? t("portfolio.txCounterparty.in")
@@ -257,7 +257,7 @@ export function TxHistory({
                               ? "••••"
                               : known
                                 ? `${dir === "out" ? "−" : dir === "in" ? "+" : ""}${formatAmount(h.amount, false, 8)}`
-                                : "—"}
+                                : "-"}
                           </span>
                           {!discreet && known ? (
                             <span className="tx-row__asset">

@@ -75,7 +75,7 @@ export function SwapPick({
     );
   }, [selectedGroup, parsed]);
 
-  // Only auto-expand the selected group the first time this menu opens —
+  // Only auto-expand the selected group the first time this menu opens -
   // never fight the user on later toggles or when parent `groups` recreate.
   useEffect(() => {
     if (!open) {

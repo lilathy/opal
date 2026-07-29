@@ -65,7 +65,7 @@ export function formatMoney(
   }
 }
 
-/** Crypto quantity number only — always numeric, never an em dash. */
+/** Crypto quantity number only - always numeric, never an em dash. */
 export function formatAmount(
   amount: string | number | null | undefined,
   discreet: boolean,
@@ -123,14 +123,14 @@ export function txTimestampDate(
   if (raw == null || raw === "") return null;
   const s = String(raw).trim();
   if (!s) return null;
-  // Unix seconds (9–12 digits).
+  // Unix seconds (9-12 digits).
   if (/^\d{9,12}$/.test(s)) {
     const n = Number(s);
     if (!Number.isFinite(n) || n <= 0) return null;
     const d = new Date(n * 1000);
     return Number.isNaN(d.getTime()) ? null : d;
   }
-  // Unix milliseconds (13–16 digits).
+  // Unix milliseconds (13-16 digits).
   if (/^\d{13,16}$/.test(s)) {
     const n = Number(s);
     if (!Number.isFinite(n) || n <= 0) return null;

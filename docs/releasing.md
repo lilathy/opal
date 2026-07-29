@@ -38,9 +38,9 @@ Installer output:
 
 `src-tauri\target\release\bundle\nsis\*.exe`
 
-## Releases-only repository (optional)
+## Releases-only repository
 
-Some setups keep source private and publish binaries to a public `*-releases` repo (installers + `latest.json` for the in-app updater). That repo should contain **binaries only** — never vault data, seeds, or signing private keys.
+Installers and `latest.json` (in-app updater) publish to the public [`opal-releases`](https://github.com/lilathy/opal-releases) repo. That repo should contain **binaries and updater metadata only** - never vault data, seeds, API keys, or signing private keys. Source lives in this repository.
 
 ## Checklist
 

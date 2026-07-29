@@ -70,7 +70,7 @@ impl XmrWalletRpc {
         Self::with_timeout(http, WALLET_RPC_TIMEOUT_SECS)
     }
 
-    /// Short-timeout client for balance polls — never inherit the 600s refresh budget.
+    /// Short-timeout client for balance polls - never inherit the 600s refresh budget.
     pub fn from_http_fast(http: &HttpCtx) -> Result<Self, OpalError> {
         Self::with_timeout(http, 2)
     }

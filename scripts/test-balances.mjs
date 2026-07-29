@@ -72,7 +72,7 @@ cacheFiatPrices("EUR", { bitcoin: 92000, solana: 184, ethereum: 3680 });
 const eurDirect = resolvePricesForFiat("EUR");
 assert(eurDirect.solana === 184, "direct EUR cache");
 
-// Exchange price-book smoke (Binance + FX) — optional network
+// Exchange price-book smoke (Binance + FX) - optional network
 const t0 = Date.now();
 const [ticksRes, fxRes] = await Promise.all([
   fetch("https://api.binance.com/api/v3/ticker/price?symbol=SOLUSDT"),
