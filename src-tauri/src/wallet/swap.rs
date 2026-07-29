@@ -245,50 +245,90 @@ fn fetch_fixed_rates_xml(http: &HttpCtx) -> Result<String, OpalError> {
     Ok(xml)
 }
 
-fn quote_from_xml_rates(
-    http: &HttpCtx,
+fn ccy_aliases(code: &str) -> Vec<String> {
+    let upper = code.trim().to_ascii_uppercase();
+    let mut out = vec![upper.clone()];
+    // FixedFloat XML sometimes lists wrapped SOL for receive-only rows.
+    if upper == "SOL" {
+        out.push("WSOL".into());
+    } else if upper == "WSOL" {
+        out.push("SOL".into());
+    }
+    out
+}
+
+fn xml_item_matches(block: &str, from_ccy: &str, to_ccy: &str) -> bool {
+    let Some(from) = xml_tag(block, "from") else {
+        return false;
+    };
+    let Some(to) = xml_tag(block, "to") else {
+        return false;
+    };
+    from.eq_ignore_ascii_case(from_ccy) && to.eq_ignore_ascii_case(to_ccy)
+}
+
+fn find_xml_item<'a>(xml: &'a str, from_ccy: &str, to_ccy: &str) -> Option<&'a str> {
+    for from_alias in ccy_aliases(from_ccy) {
+        for to_alias in ccy_aliases(to_ccy) {
+            for part in xml.split("<item>").skip(1) {
+                let end = part.find("</item>").unwrap_or(part.len());
+                let block = &part[..end];
+                if xml_item_matches(block, &from_alias, &to_alias) {
+                    return Some(block);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn quote_from_xml_block(
     from_ccy: &str,
     to_ccy: &str,
     amount: &str,
+    block: &str,
+    inverted: bool,
 ) -> Result<SwapQuote, OpalError> {
-    let xml = fetch_fixed_rates_xml(http)?;
-    let needle_from = format!("<from>{from_ccy}</from>");
-    let needle_to = format!("<to>{to_ccy}</to>");
-    let mut found: Option<&str> = None;
-    for part in xml.split("<item>").skip(1) {
-        let end = part.find("</item>").unwrap_or(part.len());
-        let block = &part[..end];
-        if block.contains(&needle_from) && block.contains(&needle_to) {
-            found = Some(block);
-            break;
-        }
-    }
-    let block = found.ok_or_else(|| {
-        OpalError::InvalidInput(format!(
-            "FixedFloat does not list {from_ccy} → {to_ccy}"
-        ))
-    })?;
-
     let rate_in: f64 = xml_tag(block, "in")
         .and_then(|s| s.parse().ok())
         .unwrap_or(1.0);
     let rate_out: f64 = xml_tag(block, "out")
         .and_then(|s| s.parse().ok())
         .unwrap_or(0.0);
-    let min_amount = xml_tag(block, "minamount").and_then(parse_qty_prefix);
-    let max_amount = xml_tag(block, "maxamount").and_then(parse_qty_prefix);
+    if rate_in <= 0.0 || rate_out <= 0.0 {
+        return Err(OpalError::InvalidInput(format!(
+            "FixedFloat rate for {from_ccy} → {to_ccy} is unavailable"
+        )));
+    }
 
     let amt = amount.trim().parse::<f64>().unwrap_or(0.0);
-    let to_amount = if rate_in > 0.0 && amt > 0.0 {
-        trim_float(amt * (rate_out / rate_in))
+    // Direct: rate_in from → rate_out to. Inverted: XML listed to → from.
+    let (units_out_per_in, min_amount, max_amount) = if inverted {
+        let per = rate_in / rate_out;
+        let min_amount = xml_tag(block, "minamount")
+            .and_then(parse_qty_prefix)
+            .and_then(|m| m.parse::<f64>().ok())
+            .map(|m| trim_float(m * (rate_out / rate_in)));
+        let max_amount = xml_tag(block, "maxamount")
+            .and_then(parse_qty_prefix)
+            .and_then(|m| m.parse::<f64>().ok())
+            .map(|m| trim_float(m * (rate_out / rate_in)));
+        (per, min_amount, max_amount)
+    } else {
+        let per = rate_out / rate_in;
+        (
+            per,
+            xml_tag(block, "minamount").and_then(parse_qty_prefix),
+            xml_tag(block, "maxamount").and_then(parse_qty_prefix),
+        )
+    };
+
+    let to_amount = if amt > 0.0 {
+        trim_float(amt * units_out_per_in)
     } else {
         "0".into()
     };
-    let rate = if rate_in > 0.0 {
-        trim_float(rate_out / rate_in)
-    } else {
-        "0".into()
-    };
+    let rate = trim_float(units_out_per_in);
 
     let mut errors = Vec::new();
     if let Some(ref min) = min_amount {
@@ -317,13 +357,37 @@ fn quote_from_xml_rates(
         max_amount,
         errors,
         raw: json!({
-            "source": "xml",
+            "source": if inverted { "xml-inverted" } else { "xml" },
             "from": from_ccy,
             "to": to_ccy,
             "in": rate_in,
             "out": rate_out,
         }),
     })
+}
+
+fn quote_from_xml_rates(
+    http: &HttpCtx,
+    from_ccy: &str,
+    to_ccy: &str,
+    amount: &str,
+) -> Result<SwapQuote, OpalError> {
+    if from_ccy.eq_ignore_ascii_case(to_ccy) {
+        return Err(OpalError::InvalidInput(
+            "Choose two different assets to swap".into(),
+        ));
+    }
+    let xml = fetch_fixed_rates_xml(http)?;
+    if let Some(block) = find_xml_item(&xml, from_ccy, to_ccy) {
+        return quote_from_xml_block(from_ccy, to_ccy, amount, block, false);
+    }
+    // ff.io's fixed.xml often lists only one direction (e.g. XMR→SOL but not SOL→XMR).
+    if let Some(block) = find_xml_item(&xml, to_ccy, from_ccy) {
+        return quote_from_xml_block(from_ccy, to_ccy, amount, block, true);
+    }
+    Err(OpalError::InvalidInput(format!(
+        "FixedFloat does not list {from_ccy} → {to_ccy}"
+    )))
 }
 
 fn ff_sign(secret: &str, body: &str) -> Result<String, OpalError> {
@@ -430,25 +494,27 @@ fn quote_from_api_price(
     })
 }
 
-/// FixedFloat rate quote. Uses signed `/price` when credentials are present;
-/// otherwise falls back to the public XML rates export (includes min/max).
+/// FixedFloat rate quote. Prefers signed `/price` when credentials are present;
+/// falls back to the public XML rates export (including inverted pairs).
 pub fn fixedfloat_rate(
     http: &HttpCtx,
     req: &FixedFloatQuoteRequest,
     api_key: Option<&str>,
     api_secret: Option<&str>,
 ) -> Result<SwapQuote, OpalError> {
+    let mut api_err: Option<OpalError> = None;
     if let (Some(key), Some(secret)) = (api_key, api_secret) {
         if !key.is_empty() && !secret.is_empty() {
             match quote_from_api_price(http, req, key, secret) {
                 Ok(q) => return Ok(q),
-                Err(_) => {
-                    // Fall through to XML so the UI still shows a live rate.
-                }
+                Err(e) => api_err = Some(e),
             }
         }
     }
-    quote_from_xml_rates(http, &req.from_ccy, &req.to_ccy, &req.amount)
+    match quote_from_xml_rates(http, &req.from_ccy, &req.to_ccy, &req.amount) {
+        Ok(q) => Ok(q),
+        Err(xml_err) => Err(api_err.unwrap_or(xml_err)),
+    }
 }
 
 pub fn fixedfloat_create_order(
@@ -621,5 +687,49 @@ pub fn suggest_provider(from_chain: ChainId, to_chain: ChainId) -> &'static str 
         "jupiter"
     } else {
         "fixedfloat"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn xml_inverted_sol_xmr_quote() {
+        // XML only lists XMR → SOL; we still need SOL → XMR for the UI.
+        let xml = r#"
+        <item>
+            <from>XMR</from>
+            <to>SOL</to>
+            <in>1</in>
+            <out>4</out>
+            <minamount>0.25 XMR</minamount>
+            <maxamount>10 XMR</maxamount>
+        </item>
+        "#;
+        let block = find_xml_item(xml, "SOL", "XMR").or_else(|| find_xml_item(xml, "XMR", "SOL"));
+        assert!(block.is_some());
+        let q = quote_from_xml_block("SOL", "XMR", "2", block.unwrap(), true).unwrap();
+        // 1 XMR = 4 SOL ⇒ 1 SOL = 0.25 XMR ⇒ 2 SOL = 0.5 XMR
+        assert_eq!(q.to_amount, "0.5");
+        assert_eq!(q.rate, "0.25");
+        assert_eq!(q.min_amount.as_deref(), Some("1")); // 0.25 XMR * 4 SOL/XMR
+    }
+
+    #[test]
+    fn xml_direct_btc_xmr_quote() {
+        let xml = r#"
+        <item>
+            <from>BTC</from>
+            <to>XMR</to>
+            <in>1</in>
+            <out>180</out>
+            <minamount>0.001 BTC</minamount>
+        </item>
+        "#;
+        let block = find_xml_item(xml, "BTC", "XMR").unwrap();
+        let q = quote_from_xml_block("BTC", "XMR", "0.01", block, false).unwrap();
+        assert_eq!(q.to_amount, "1.8");
+        assert_eq!(q.rate, "180");
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "opal"
-version = "0.1.1"
+version = "0.1.2"
 description = "Opal - hybrid self-custody desktop wallet (software + Trezor + watch-only)"
 authors = ["Opal Contributors"]
 edition = "2021"

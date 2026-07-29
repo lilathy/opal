@@ -37,6 +37,7 @@ import {
   rememberOptimisticSpend,
 } from "../lib/balances";
 import { scrapePortfolioBalance } from "../lib/balanceScrape";
+import { demoHistoryForPortfolioId, isDemoMode } from "../lib/demoMode";
 import { playSendSound } from "../lib/sounds";
 import {
   chainLabel,
@@ -95,6 +96,8 @@ function exampleAddressForChain(chain: string): string {
 interface Props {
   portfolio: PortfolioRecord;
   balance?: PortfolioBalance;
+  /** Full vault list - used so DEV demo history matches showcase wallets. */
+  portfolios?: PortfolioRecord[];
   initialTab?: Tab;
   trezorConnected?: boolean;
   onChanged: (opts?: { reloadBalances?: boolean }) => Promise<void>;
@@ -122,6 +125,7 @@ function AddressEmphasis({ address }: { address: string }) {
 export function PortfolioDetail({
   portfolio,
   balance: balanceProp,
+  portfolios = [],
   initialTab = "balances",
   trezorConnected = false,
   onChanged,
@@ -253,6 +257,10 @@ export function PortfolioDetail({
   }, [status?.fiat]);
 
   async function refreshLiveBalance(isCancelled?: () => boolean) {
+    if (isDemoMode()) {
+      if (!isCancelled?.()) setBalanceLoading(false);
+      return;
+    }
     const started = Date.now();
     try {
       const mine = await scrapePortfolioBalance(portfolio.id);
@@ -335,6 +343,15 @@ export function PortfolioDetail({
   // real txs to reconstruct balances over time (not just the History tab).
   useEffect(() => {
     let cancelled = false;
+
+    if (isDemoMode()) {
+      const list = portfolios.length ? portfolios : [portfolio];
+      const rows = demoHistoryForPortfolioId(portfolio.id, list);
+      setHistory(rows);
+      setHistoryLoading(false);
+      return;
+    }
+
     const cached = peekPortfolioHistory(portfolio.id);
     if (cached) {
       setHistory(cached);
@@ -360,6 +377,7 @@ export function PortfolioDetail({
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portfolio.id]);
 
   useEffect(() => {
@@ -443,6 +461,12 @@ export function PortfolioDetail({
 
   async function loadHistory() {
     setHistoryLoading(true);
+    if (isDemoMode()) {
+      const list = portfolios.length ? portfolios : [portfolio];
+      setHistory(demoHistoryForPortfolioId(portfolio.id, list));
+      setHistoryLoading(false);
+      return;
+    }
     invalidatePortfolioHistory(portfolio.id);
     try {
       setHistory(await api.portfolioHistory(portfolio.id));

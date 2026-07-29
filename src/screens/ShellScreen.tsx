@@ -48,6 +48,11 @@ import {
 } from "../lib/chartCache";
 import { formatAmount, formatQty, formatTxTime, shortHash, txTimestampDate } from "../lib/format";
 import { filterDustTxs } from "../lib/txFilter";
+import {
+  buildDemoBalances,
+  buildDemoOverview,
+  isDemoMode,
+} from "../lib/demoMode";
 import { BalanceChart } from "../components/BalanceChart";
 import { TxIconReceived, TxIconSelf, TxIconSent } from "../components/TxIcons";
 import { useFiatPrices } from "../hooks/useFiatPrices";
@@ -426,15 +431,20 @@ export function ShellScreen() {
   async function reloadList() {
     const plist = await api.portfolioList();
     setPortfolios(plist);
-    const cached = balancesFromCache(plist);
-    if (cached.length) {
-      setBalances((prev) => mergeBalances(prev, cached));
+    if (isDemoMode()) {
+      setBalances(buildDemoBalances(plist));
+    } else {
+      const cached = balancesFromCache(plist);
+      if (cached.length) {
+        setBalances((prev) => mergeBalances(prev, cached));
+      }
     }
     await refresh();
     return plist;
   }
 
   function upsertBalance(bal: PortfolioBalance) {
+    if (isDemoMode()) return;
     setBalances((prev) => applyLiveBalances(prev, [bal]));
   }
 
@@ -443,6 +453,12 @@ export function ShellScreen() {
   async function reloadBalances() {
     const list = portfoliosRef.current;
     if (!list.length) return;
+
+    if (isDemoMode()) {
+      setBalances(buildDemoBalances(list));
+      lastBalancesFetchAt.current = Date.now();
+      return;
+    }
 
     const selected = selectedIdRef.current;
     const ordered = selected
@@ -480,6 +496,10 @@ export function ShellScreen() {
 
   async function reload() {
     try {
+      if (isDemoMode()) {
+        await reloadList();
+        return;
+      }
       const instant = await api.portfolioBalancesCached();
       if (instant.length) {
         setBalances((prev) => mergeBalances(prev, instant));
@@ -751,15 +771,6 @@ export function ShellScreen() {
       setRecentLoading(false);
       return;
     }
-    let cancelled = false;
-    setRecentLoading(true);
-
-    const cached = loadOverviewLedger(portfolioIdsKey);
-    if (cached?.length) {
-      setTxLedger(cached);
-    } else {
-      setTxLedger(null);
-    }
 
     // Prefetch default 7D prices while history loads - chart paints the
     // moment the first ledger chunk arrives.
@@ -775,6 +786,25 @@ export function ShellScreen() {
         fiat,
         7,
       );
+    }
+
+    if (isDemoMode()) {
+      const demo = buildDemoOverview(portfolios);
+      setTxLedger(demo.ledger);
+      setRecentActivity(demo.activity);
+      setRecentLoading(false);
+      saveOverviewLedger(portfolioIdsKey, demo.ledger);
+      return;
+    }
+
+    let cancelled = false;
+    setRecentLoading(true);
+
+    const cached = loadOverviewLedger(portfolioIdsKey);
+    if (cached?.length) {
+      setTxLedger(cached);
+    } else {
+      setTxLedger(null);
     }
 
     let merged: LedgerEvent[] = cached ? [...cached] : [];
@@ -1471,6 +1501,7 @@ export function ShellScreen() {
               key={selected.id}
               portfolio={selected}
               balance={selectedBal}
+              portfolios={portfolios}
               initialTab={detailTab}
               trezorConnected={
                 Boolean(trezorStatus?.available) && (trezorStatus?.device_count ?? 0) > 0

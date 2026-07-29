@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { NotificationHost } from "./components/NotificationHost";
+import { useScreenshotHotkey } from "./hooks/useScreenshotHotkey";
 import { isSetupSessionActive } from "./lib/seedIntent";
 import { CreateVaultScreen } from "./screens/CreateVaultScreen";
 import { UnlockVaultScreen } from "./screens/UnlockVaultScreen";
@@ -9,6 +10,7 @@ import { useVault } from "./state/vault";
 export default function App() {
   const { t } = useTranslation();
   const { status, loading } = useVault();
+  useScreenshotHotkey();
 
   if (loading || !status) {
     return (

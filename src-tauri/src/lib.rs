@@ -45,6 +45,7 @@ pub fn run() {
             commands::vault_export,
             commands::vault_import,
             commands::write_text_file,
+            commands::save_png_base64,
             commands::set_autostart,
             commands::app_info,
             commands::perf_debug_log,

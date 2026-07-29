@@ -1396,22 +1396,33 @@ fn load_fixedfloat_local_file() -> (Option<String>, Option<String>) {
         api_secret: String,
     }
 
-    let candidates = [
-        std::env::current_dir()
-            .ok()
-            .map(|p| p.join("fixedfloat.local.json")),
-        std::env::current_dir()
-            .ok()
-            .map(|p| p.join("..").join("fixedfloat.local.json")),
-        // Dev: src-tauri cwd → repo root
-        option_env!("CARGO_MANIFEST_DIR").map(|d| {
-            std::path::Path::new(d)
+    let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            candidates.push(dir.join("fixedfloat.local.json"));
+        }
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        candidates.push(cwd.join("fixedfloat.local.json"));
+        candidates.push(cwd.join("..").join("fixedfloat.local.json"));
+    }
+    // Installed / user-local copies (Windows AppData).
+    if let Ok(roaming) = std::env::var("APPDATA") {
+        candidates.push(std::path::PathBuf::from(roaming).join("Opal").join("fixedfloat.local.json"));
+    }
+    if let Ok(local) = std::env::var("LOCALAPPDATA") {
+        candidates.push(std::path::PathBuf::from(local).join("Opal").join("fixedfloat.local.json"));
+    }
+    // Dev: src-tauri cwd → repo root (baked at compile time).
+    if let Some(dir) = option_env!("CARGO_MANIFEST_DIR") {
+        candidates.push(
+            std::path::Path::new(dir)
                 .join("..")
-                .join("fixedfloat.local.json")
-        }),
-    ];
+                .join("fixedfloat.local.json"),
+        );
+    }
 
-    for path in candidates.into_iter().flatten() {
+    for path in candidates {
         let Ok(raw) = std::fs::read_to_string(&path) else {
             continue;
         };

@@ -387,7 +387,7 @@ pub fn app_info() -> AppInfo {
         name: "Opal".into(),
         version: env!("CARGO_PKG_VERSION").into(),
         license: "MIT".into(),
-        tagline: "Quiet self-custody".into(),
+        tagline: "Hybrid self-custody".into(),
         trezor_disclaimer:
             "Not affiliated with SatoshiLabs / Trezor. Trezor is a trademark of SatoshiLabs."
                 .into(),
@@ -421,6 +421,31 @@ pub fn write_text_file(
     Ok(())
 }
 
+/// Save a PNG data URL from the frontend (DOM screenshot) to the Desktop.
+/// Works without an unlocked vault so captures work on lock / create screens too.
+#[tauri::command]
+pub fn save_png_base64(data_url: String) -> Result<String, String> {
+    let trimmed = data_url.trim();
+    let b64 = trimmed
+        .strip_prefix("data:image/png;base64,")
+        .or_else(|| trimmed.strip_prefix("data:image/PNG;base64,"))
+        .unwrap_or(trimmed);
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(b64)
+        .map_err(|e| map_err(OpalError::Io(format!("png base64: {e}"))))?;
+    if bytes.is_empty() {
+        return Err(map_err(OpalError::Io("empty png".into())));
+    }
+    let desktop = dirs::desktop_dir().ok_or_else(|| {
+        map_err(OpalError::Io("desktop folder not found".into()))
+    })?;
+    let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
+    let path = desktop.join(format!("Opal-{stamp}.png"));
+    std::fs::write(&path, &bytes).map_err(|e| map_err(OpalError::Io(e.to_string())))?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
 #[tauri::command]
 pub fn perf_debug_log(message: String) {
     crate::perf::append_frontend_log(message);
@@ -439,4 +464,23 @@ pub fn perf_ping() -> f64 {
 #[tauri::command]
 pub fn perf_run_bench(iters: Option<u32>) -> crate::perf::PerfBenchResult {
     crate::perf::run_bench(iters.unwrap_or(40))
+}
+
+#[cfg(test)]
+mod screenshot_tests {
+    use super::save_png_base64;
+
+    #[test]
+    fn save_png_base64_writes_desktop_file() {
+        // 1×1 transparent PNG
+        let data = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+        let path = save_png_base64(data.to_string()).expect("save png");
+        let p = std::path::Path::new(&path);
+        assert!(p.exists(), "missing {path}");
+        assert!(path.contains("Opal-"), "{path}");
+        assert!(path.ends_with(".png"), "{path}");
+        let meta = std::fs::metadata(p).unwrap();
+        assert!(meta.len() > 10);
+        let _ = std::fs::remove_file(p);
+    }
 }

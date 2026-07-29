@@ -148,6 +148,7 @@ export function SwapScreen({
   const [amount, setAmount] = useState("");
   const [amountUnit, setAmountUnit] = useState<"native" | "fiat">("native");
   const [quote, setQuote] = useState<SwapQuote | null>(null);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
   const [pairMin, setPairMin] = useState<string | null>(null);
   const [quoting, setQuoting] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -267,6 +268,7 @@ export function SwapScreen({
     setAmount("");
     setAmountUnit("native");
     setQuote(null);
+    setQuoteError(null);
     setFfOrder(null);
     setPairMin(null);
   }
@@ -274,6 +276,7 @@ export function SwapScreen({
   function selectTo(portfolioId: string, symbol: string) {
     setToKey(`${portfolioId}:${symbol}`);
     setQuote(null);
+    setQuoteError(null);
     setFfOrder(null);
     setPairMin(null);
   }
@@ -359,6 +362,7 @@ export function SwapScreen({
   useEffect(() => {
     if (!from || !toSymbol || !toPortfolio) {
       setQuote(null);
+      setQuoteError(null);
       return;
     }
     let cancelled = false;
@@ -377,11 +381,18 @@ export function SwapScreen({
           );
           if (cancelled) return;
           if (q.minAmount) setPairMin(q.minAmount);
-          if (nativeAmount) setQuote(q);
-          else setQuote(null);
-        } catch {
+          if (nativeAmount) {
+            setQuote(q);
+            setQuoteError(null);
+          } else {
+            setQuote(null);
+            setQuoteError(null);
+          }
+        } catch (e) {
           if (!cancelled) {
-            if (nativeAmount) setQuote(null);
+            setQuote(null);
+            if (nativeAmount) setQuoteError(parseInvokeError(e).message);
+            else setQuoteError(null);
           }
         } finally {
           if (!cancelled) setQuoting(false);
@@ -745,6 +756,7 @@ export function SwapScreen({
         (belowMin && pairMin) ||
         (pairMin && !hasAmount) ||
         ffOrder ||
+        quoteError ||
         (provider === "fixedfloat" && !ffReady) ? (
           <div className="swap-meta">
             {quote && hasAmount && !quoteBlocked ? (
@@ -754,6 +766,10 @@ export function SwapScreen({
                   1 {from?.symbol} ≈ {formatCompactAmount(quote.rate)} {toSymbol}
                 </strong>
               </div>
+            ) : null}
+
+            {quoteError && hasAmount && !quote ? (
+              <p className="field-hint field-hint--error">{quoteError}</p>
             ) : null}
 
             {overBalance ? (

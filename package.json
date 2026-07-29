@@ -1,7 +1,7 @@
 {
   "name": "opal",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "license": "MIT",
   "description": "Opal - hybrid self-custody desktop wallet (software + Trezor + watch-only)",
@@ -24,6 +24,7 @@
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-updater": "^2.10.1",
     "@web3icons/core": "^4.0.53",
+    "html-to-image": "^1.11.13",
     "i18next": "^25.3.2",
     "qr-code-styling": "^1.9.2",
     "react": "^19.1.0",

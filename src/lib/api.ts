@@ -366,6 +366,9 @@ export const api = {
     timedInvoke<VaultStatus>("vault_import", { request: { password, srcPath } }),
   writeTextFile: (destPath: string, contents: string) =>
     timedInvoke<void>("write_text_file", { request: { destPath, contents } }),
+  /** DOM screenshot PNG data URL → Desktop/Opal-YYYYMMDD-HHMMSS.png */
+  savePngBase64: (dataUrl: string) =>
+    timedInvoke<string>("save_png_base64", { dataUrl }),
   setAutostart: (enabled: boolean) => timedInvoke<void>("set_autostart", { enabled }),
   appInfo: () => timedInvoke<AppInfo>("app_info"),
 
