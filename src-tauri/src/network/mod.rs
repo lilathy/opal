@@ -196,11 +196,6 @@ impl HttpCtx {
         self.rpc_url(chain)
     }
 
-    /// Retained for compatibility; always `None` (custom RPC removed).
-    pub fn custom_rpc_get(&self, _key: &str) -> Option<&str> {
-        None
-    }
-
     pub fn eth_rpc(&self, chain: ChainId, method: &str, params: Value) -> Result<Value, OpalError> {
         let url = self.rpc_url(chain);
         let body = json!({
@@ -221,19 +216,32 @@ impl HttpCtx {
     }
 
     pub fn get_json(&self, url: &str) -> Result<Value, OpalError> {
-        let res = self
-            .client
-            .get(url)
-            .send()
-            .map_err(|e| OpalError::Io(format!("GET {url}: {e}")))?;
-        if !res.status().is_success() {
-            return Err(OpalError::Io(format!(
-                "GET {url} status {}",
-                res.status()
-            )));
+        let mut last_err = None;
+        for attempt in 0..2u32 {
+            if attempt > 0 {
+                std::thread::sleep(Duration::from_millis(220 * u64::from(attempt)));
+            }
+            let res = match self.client.get(url).send() {
+                Ok(r) => r,
+                Err(e) => {
+                    last_err = Some(OpalError::Io(format!("GET {url}: {e}")));
+                    continue;
+                }
+            };
+            let status = res.status();
+            if status.is_success() {
+                return res
+                    .json()
+                    .map_err(|e| OpalError::Io(format!("json: {e}")));
+            }
+            // Soft-retry transient explorer pressure; keep permanent errors fast.
+            if status.as_u16() == 429 || status.is_server_error() {
+                last_err = Some(OpalError::Io(format!("GET {url} status {status}")));
+                continue;
+            }
+            return Err(OpalError::Io(format!("GET {url} status {status}")));
         }
-        res.json()
-            .map_err(|e| OpalError::Io(format!("json: {e}")))
+        Err(last_err.unwrap_or_else(|| OpalError::Io(format!("GET {url} failed"))))
     }
 
     /// POST + parse JSON, with a couple of short-backoff retries.
@@ -483,16 +491,40 @@ impl HttpCtx {
     }
 
     pub fn sol_balance_lamports(&self, address: &str) -> Result<u64, OpalError> {
-        let url = self.rpc_url(ChainId::Sol);
+        // Race a few public RPCs — Solscan feels fast because explorers hit
+        // indexed infra; we get closer by taking the first healthy reply.
+        const SOL_RPCS: &[&str] = &[
+            "https://solana-rpc.publicnode.com",
+            "https://solana.drpc.org",
+            "https://rpc.ankr.com/solana",
+            "https://api.mainnet-beta.solana.com",
+        ];
         let body = json!({
             "jsonrpc": "2.0",
             "id": 1,
             "method": "getBalance",
             "params": [address]
         });
-        // Native balance must stay snappy — one attempt, no retry pile-up.
-        let v = self.post_json_once(&url, &body)?;
-        Ok(v["result"]["value"].as_u64().unwrap_or(0))
+        let (tx, rx) = std::sync::mpsc::channel();
+        for url in SOL_RPCS {
+            let http = self.clone();
+            let body = body.clone();
+            let url = (*url).to_string();
+            let tx = tx.clone();
+            std::thread::spawn(move || {
+                if let Ok(v) = http.post_json_once(&url, &body) {
+                    if let Some(lamports) = v["result"]["value"].as_u64() {
+                        let _ = tx.send(lamports);
+                    }
+                }
+            });
+        }
+        drop(tx);
+        // First success within the client timeout window wins.
+        match rx.recv_timeout(Duration::from_millis(2_200)) {
+            Ok(lamports) => Ok(lamports),
+            Err(_) => Err(OpalError::Io("sol getBalance: all RPCs timed out".into())),
+        }
     }
 
     /// True if the address has ever signed a transaction (even with zero balance).
@@ -560,7 +592,12 @@ impl HttpCtx {
         owner: &str,
         program_id: &str,
     ) -> Result<HashMap<String, u64>, OpalError> {
-        let url = self.rpc_url(ChainId::Sol);
+        const SOL_RPCS: &[&str] = &[
+            "https://solana-rpc.publicnode.com",
+            "https://solana.drpc.org",
+            "https://rpc.ankr.com/solana",
+            "https://api.mainnet-beta.solana.com",
+        ];
         let body = json!({
             "jsonrpc": "2.0",
             "id": 1,
@@ -571,7 +608,24 @@ impl HttpCtx {
                 { "encoding": "jsonParsed" }
             ]
         });
-        let v = self.post_json_once(&url, &body)?;
+        let (tx, rx) = std::sync::mpsc::channel::<Value>();
+        for url in SOL_RPCS {
+            let http = self.clone();
+            let body = body.clone();
+            let url = (*url).to_string();
+            let tx = tx.clone();
+            std::thread::spawn(move || {
+                if let Ok(v) = http.post_json_once(&url, &body) {
+                    if v["result"]["value"].is_array() {
+                        let _ = tx.send(v);
+                    }
+                }
+            });
+        }
+        drop(tx);
+        let v = rx
+            .recv_timeout(Duration::from_millis(2_200))
+            .map_err(|_| OpalError::Io("sol token accounts: all RPCs timed out".into()))?;
         let mut totals: HashMap<String, u64> = HashMap::new();
         if let Some(arr) = v["result"]["value"].as_array() {
             for acc in arr {
@@ -2117,5 +2171,18 @@ mod history_tests {
         assert_eq!(dir, "out");
         assert_eq!(amount, 50_000);
         assert_eq!(fee, Some(300));
+    }
+
+    #[test]
+    fn tron_address_to_hex_roundtrip_bytes() {
+        // Well-known Tron burn address T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb
+        let hex = tron_address_to_hex("T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb").expect("hex");
+        assert!(hex.starts_with("41"));
+        assert_eq!(hex.len(), 42);
+        let bytes = hex::decode(&hex).expect("bytes");
+        assert_eq!(bytes.len(), 21);
+        assert_eq!(bytes[0], 0x41);
+        // Must not be UTF-8 of the base58 string.
+        assert_ne!(bytes.as_slice(), b"T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb");
     }
 }

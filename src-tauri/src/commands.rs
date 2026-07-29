@@ -122,6 +122,10 @@ pub struct UpdateSettingsRequest {
     pub custom_rpc: Option<std::collections::HashMap<String, String>>,
     pub fixedfloat_api_key: Option<Option<String>>,
     pub fixedfloat_api_secret: Option<Option<String>>,
+    pub activity_min_fiat: Option<f64>,
+    pub analytics_enabled: Option<bool>,
+    pub analytics_tile_order: Option<Vec<String>>,
+    pub analytics_hidden_tiles: Option<Vec<String>>,
 }
 
 #[tauri::command]
@@ -166,6 +170,22 @@ pub fn update_settings(
     }
     if let Some(v) = request.notifications_enabled {
         unlocked.payload.settings.notifications_enabled = v;
+    }
+    if let Some(v) = request.activity_min_fiat {
+        unlocked.payload.settings.activity_min_fiat = if v.is_finite() && v >= 0.0 {
+            v
+        } else {
+            0.0
+        };
+    }
+    if let Some(v) = request.analytics_enabled {
+        unlocked.payload.settings.analytics_enabled = v;
+    }
+    if let Some(v) = request.analytics_tile_order {
+        unlocked.payload.settings.analytics_tile_order = v;
+    }
+    if let Some(v) = request.analytics_hidden_tiles {
+        unlocked.payload.settings.analytics_hidden_tiles = v;
     }
     // custom_rpc ignored — Opal uses curated public nodes only.
     unlocked.payload.settings.custom_rpc.clear();
@@ -373,6 +393,32 @@ pub fn app_info() -> AppInfo {
                 .into(),
         source_url: "https://github.com/lilathy/opal".into(),
     }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WriteTextFileRequest {
+    pub dest_path: String,
+    pub contents: String,
+}
+
+#[tauri::command]
+pub fn write_text_file(
+    state: State<'_, AppState>,
+    request: WriteTextFileRequest,
+) -> Result<(), String> {
+    {
+        let session = state.session.lock();
+        session
+            .as_ref()
+            .ok_or_else(|| map_err(OpalError::Locked))?;
+    }
+    if request.dest_path.trim().is_empty() {
+        return Err(map_err(OpalError::Io("empty path".into())));
+    }
+    std::fs::write(&request.dest_path, request.contents.as_bytes())
+        .map_err(|e| map_err(OpalError::Io(e.to_string())))?;
+    Ok(())
 }
 
 #[tauri::command]

@@ -10,7 +10,9 @@ import {
   formatTxTime,
   shortHash,
 } from "../lib/format";
+import { filterDustTxs } from "../lib/txFilter";
 import { IconChevronDown, IconCopy } from "./UiIcons";
+import { AssetIcon } from "./CryptoIcons";
 import { TxIconReceived, TxIconSelf, TxIconSent } from "./TxIcons";
 
 export type HistoryFilter = "all" | "in" | "out" | "pending";
@@ -24,6 +26,8 @@ type Props = {
   portfolio: PortfolioRecord;
   fiat: string;
   fiatPrices: Record<string, number>;
+  /** Hide rows below this display-currency notional (0 = show all). */
+  activityMinFiat?: number;
   busy?: boolean;
   onBumpFee?: (txid: string) => void;
 };
@@ -72,6 +76,7 @@ export function TxHistory({
   portfolio,
   fiat,
   fiatPrices,
+  activityMinFiat = 0,
   busy = false,
   onBumpFee,
 }: Props) {
@@ -80,7 +85,8 @@ export function TxHistory({
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
-    return rows.filter((h) => {
+    const dustFiltered = filterDustTxs(rows, activityMinFiat, fiatPrices);
+    return dustFiltered.filter((h) => {
       const dir = h.direction.toLowerCase();
       const st = h.status.toLowerCase();
       if (filter === "in") return dir.includes("in") || dir.includes("recv");
@@ -88,7 +94,7 @@ export function TxHistory({
       if (filter === "pending") return st.includes("pending") || st.includes("unconfirmed");
       return true;
     });
-  }, [rows, filter]);
+  }, [rows, filter, activityMinFiat, fiatPrices]);
 
   const sections = useMemo((): DaySection[] => {
     const map = new Map<string, DaySection>();
@@ -254,7 +260,10 @@ export function TxHistory({
                                 : "—"}
                           </span>
                           {!discreet && known ? (
-                            <span className="tx-row__symbol">{h.symbol}</span>
+                            <span className="tx-row__asset">
+                              <AssetIcon symbol={h.symbol} size={16} />
+                              <span className="tx-row__symbol">{h.symbol}</span>
+                            </span>
                           ) : null}
                         </div>
 

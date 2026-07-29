@@ -115,10 +115,7 @@ pub fn analyze_address_safety(
             let msg = err.to_string();
             // Prefer a clear user-facing line when format is wrong.
             warnings.push(if msg.contains("not a ") || msg.contains("Invalid") {
-                format!(
-                    "Not a valid {} address — check the destination carefully",
-                    chain_label(chain)
-                )
+                format!("Not a valid {} address", chain_label(chain))
             } else {
                 msg
             });

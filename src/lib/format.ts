@@ -80,6 +80,31 @@ export function formatAmount(
   });
 }
 
+/**
+ * Display a crypto amount without trailing junk zeros
+ * (e.g. `0.919030000000` → `0.91903`).
+ */
+export function formatCompactAmount(
+  amount: string | number | null | undefined,
+  maxFractionDigits = 8,
+): string {
+  if (amount == null || amount === "") return "";
+  const raw = typeof amount === "number" ? amount : Number(String(amount).trim());
+  if (!Number.isFinite(raw)) {
+    const s = String(amount).trim();
+    if (!s.includes(".")) return s;
+    return s.replace(/(\.\d*?[1-9])0+$/, "$1").replace(/\.0+$/, "");
+  }
+  if (raw === 0) return "0";
+  const digits =
+    Math.abs(raw) >= 1 ? Math.min(6, maxFractionDigits) : maxFractionDigits;
+  return raw
+    .toFixed(digits)
+    .replace(/(\.\d*?[1-9])0+$/, "$1")
+    .replace(/\.0+$/, "")
+    .replace(/\.$/, "");
+}
+
 /** Crypto quantity with symbol for list rows. */
 export function formatQty(
   amount: string | number | null | undefined,

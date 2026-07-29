@@ -82,9 +82,9 @@ const tick = await ticksRes.json();
 const fx = await fxRes.json();
 const ms = Date.now() - t0;
 const sol = Number(tick.price);
-const eur = Number(fx?.rates?.EUR);
+const eurRate = Number(fx?.rates?.EUR);
 assert(ticksRes.ok && sol > 0, `binance SOL ${sol} in ${ms}ms`);
-assert(fxRes.ok && eur > 0, `fx EUR ${eur}`);
+assert(fxRes.ok && eurRate > 0, `fx EUR ${eurRate}`);
 
 if (failed) {
   console.error(`${failed} test(s) failed`);

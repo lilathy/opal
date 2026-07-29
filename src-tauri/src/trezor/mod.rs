@@ -130,6 +130,9 @@ pub(crate) const MSG_TX_ACK: u16 = 22;
 
 static SESSION_ACTIVE: AtomicBool = AtomicBool::new(false);
 static ACTIVE_SESSION_ID: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
+/// Serialize every Bridge/USB session so status polls, auto-discover, and
+/// SignTx never steal the device out from under each other.
+static TREZOR_IO: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 #[derive(Debug, Clone, Serialize)]
 pub struct TrezorStatus {
@@ -569,6 +572,13 @@ pub fn trezor_sign_ethereum_tx(params: &EthereumTxParams) -> Result<String, Opal
 pub(crate) fn with_session<T>(
     f: impl FnOnce(&mut dyn Transport) -> Result<T, OpalError>,
 ) -> Result<T, OpalError> {
+    let _io = TREZOR_IO.try_lock().ok_or_else(|| {
+        OpalError::InvalidInput(
+            "Trezor is busy with another request. Finish confirming on the device, then retry."
+                .into(),
+        )
+    })?;
+
     // Prefer Bridge when Suite/trezord is reachable. Skip the multi-second
     // Bridge probe when we recently learned it's down (common: no Suite open).
     if !bridge_marked_down() {
@@ -624,12 +634,28 @@ fn with_bridge_devices<T>(
     devices: &[EnumeratedDevice],
     f: impl FnOnce(&mut dyn Transport) -> Result<T, OpalError>,
 ) -> Result<T, OpalError> {
+    // Prefer a free device. Only steal an existing session when every device
+    // is already claimed (common: Suite holding an idle session).
     let device = devices
         .iter()
         .find(|d| d.session.is_none())
         .unwrap_or(&devices[0]);
     let previous = device.session.as_deref().unwrap_or("null");
-    let mut session = TrezorSession::acquire(client, &device.path, previous)?;
+    let mut session = match TrezorSession::acquire(client, &device.path, previous) {
+        Ok(s) => s,
+        Err(first) if device.session.is_some() => {
+            // Steal failed — wait briefly and retry once against a free slot.
+            std::thread::sleep(Duration::from_millis(180));
+            let refreshed = enumerate(client).unwrap_or_else(|_| devices.to_vec());
+            let free = refreshed
+                .iter()
+                .find(|d| d.session.is_none())
+                .unwrap_or(&refreshed[0]);
+            let prev = free.session.as_deref().unwrap_or("null");
+            TrezorSession::acquire(client, &free.path, prev).map_err(|_| first)?
+        }
+        Err(e) => return Err(e),
+    };
     f(&mut session)
 }
 

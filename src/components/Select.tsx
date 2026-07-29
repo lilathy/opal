@@ -55,22 +55,39 @@ export function Select({
     const trigger = triggerRef.current;
     if (!trigger) return;
     const rect = trigger.getBoundingClientRect();
-    const menuHeight = Math.min(280, options.length * 44 + 16);
     const gap = 6;
-    const spaceBelow = window.innerHeight - rect.bottom - gap;
-    const openUp = spaceBelow < menuHeight && rect.top > spaceBelow;
+    const edge = 8;
+    const spaceBelow = Math.max(0, window.innerHeight - rect.bottom - gap - edge);
+    const spaceAbove = Math.max(0, rect.top - gap - edge);
+    const estimated = Math.min(280, Math.max(options.length, 1) * 44 + 16);
+    // Prefer below when it fits; otherwise open upward into the larger space.
+    const openUp = spaceBelow < estimated && spaceAbove > spaceBelow;
+    const available = openUp ? spaceAbove : spaceBelow;
+    const maxHeight = Math.min(280, Math.max(available, 1));
     const width = Math.max(rect.width, 200);
-    const left = Math.min(rect.left, window.innerWidth - width - 8);
+    const left = Math.min(Math.max(edge, rect.left), window.innerWidth - width - edge);
 
-    setMenuStyle({
-      position: "fixed",
-      left: Math.max(8, left),
-      width,
-      top: openUp ? undefined : rect.bottom + gap,
-      bottom: openUp ? window.innerHeight - rect.top + gap : undefined,
-      maxHeight: Math.min(280, openUp ? rect.top - 16 : spaceBelow),
-      zIndex: 4000,
-    });
+    if (openUp) {
+      setMenuStyle({
+        position: "fixed",
+        left,
+        width,
+        top: "auto",
+        bottom: window.innerHeight - rect.top + gap,
+        maxHeight,
+        zIndex: 4000,
+      });
+    } else {
+      setMenuStyle({
+        position: "fixed",
+        left,
+        width,
+        top: rect.bottom + gap,
+        bottom: "auto",
+        maxHeight,
+        zIndex: 4000,
+      });
+    }
   }
 
   useLayoutEffect(() => {

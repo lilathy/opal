@@ -7,9 +7,12 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { AnimatedMoney } from "../components/AnimatedMoney";
+import { AnalyticsPanel } from "../components/AnalyticsPreview";
 import { AssetIcon, ChainIcon } from "../components/CryptoIcons";
 import {
   IconChevronDown,
+  IconCopy,
   IconHome,
   IconPlus,
   IconSettings,
@@ -17,11 +20,13 @@ import {
 } from "../components/UiIcons";
 import {
   api,
+  invalidatePortfolioHistory,
   parseInvokeError,
   type AssetBalance,
   type PortfolioBalance,
   type PortfolioRecord,
   type TrezorStatus,
+  type TxRow,
 } from "../lib/api";
 import { coinIdForSymbol, txsToLedger, type LedgerEvent } from "../lib/charts";
 import {
@@ -36,12 +41,15 @@ import {
 import { scrapePortfolioBalance } from "../lib/balanceScrape";
 import {
   fetchPriceHistoryCached,
+  invalidateOverviewLedger,
   loadOverviewLedger,
   mergeLedgerEvents,
   saveOverviewLedger,
 } from "../lib/chartCache";
-import { formatMoney, formatQty } from "../lib/format";
+import { formatAmount, formatQty, formatTxTime, shortHash, txTimestampDate } from "../lib/format";
+import { filterDustTxs } from "../lib/txFilter";
 import { BalanceChart } from "../components/BalanceChart";
+import { TxIconReceived, TxIconSelf, TxIconSent } from "../components/TxIcons";
 import { useFiatPrices } from "../hooks/useFiatPrices";
 import { useIncomingWatcher } from "../hooks/useIncomingWatcher";
 import { useSortableList } from "../hooks/useSortableList";
@@ -49,6 +57,7 @@ import { SyncTrezorPanel } from "../components/SyncTrezorPanel";
 import { TrezorSpinner } from "../components/TrezorSpinner";
 import { useVault } from "../state/vault";
 import { useNotify } from "../state/notifications";
+import { playTrezorConnectedSound } from "../lib/sounds";
 import { AddPortfolio } from "./AddPortfolio";
 import { PortfolioDetail } from "./PortfolioDetail";
 import { clearSeedSetupIntent, type SeedSetupIntent } from "../lib/seedIntent";
@@ -60,33 +69,21 @@ type View = "home" | "settings" | "seed" | "add" | "portfolio" | "swap" | "trezo
 
 const ORDER_KEY = "opal.portfolioOrder";
 
-type ContextMenuState = { id: string; x: number; y: number; surface: "sidebar" | "overview" };
+type ContextMenuState = { id: string; x: number; y: number };
+
+type RecentActivityItem = {
+  key: string;
+  portfolioId: string;
+  portfolioName: string;
+  chain: string;
+  tx: TxRow;
+};
 
 function kindI18nKey(kind: string): string {
   if (kind === "software") return "portfolio.kindSoftware";
   if (kind === "trezor") return "portfolio.kindTrezor";
   if (kind === "watch_only") return "portfolio.kindWatch";
   return kind;
-}
-
-function portfolioFiat(
-  bal: PortfolioBalance | undefined,
-  discreet: boolean,
-  fiat: string,
-  prices: Record<string, number>,
-): string {
-  if (discreet) return "••••";
-  return formatMoney(portfolioFiatSum(bal, fiat, prices), fiat, false);
-}
-
-function portfolioQty(
-  bal: PortfolioBalance | undefined,
-  discreet: boolean,
-  fallbackSymbol: string,
-): string {
-  if (discreet) return "••••";
-  const a = bal?.assets?.[0];
-  return formatQty(a?.amount ?? 0, a?.symbol ?? fallbackSymbol, false);
 }
 
 function balancesFromCache(plist: PortfolioRecord[]): PortfolioBalance[] {
@@ -167,22 +164,17 @@ export function ShellScreen() {
   const [detailTab, setDetailTab] = useState<"balances" | "receive" | "send" | "history">(
     "balances",
   );
-  const [expandedOverview, setExpandedOverview] = useState<Record<string, boolean>>({});
   const [expandedSidebar, setExpandedSidebar] = useState<Record<string, boolean>>({});
   const lastBalancesFetchAt = useRef(0);
   const portfoliosRef = useRef(portfolios);
   portfoliosRef.current = portfolios;
+  const selectedIdRef = useRef(selectedId);
+  selectedIdRef.current = selectedId;
   const [trezorStatus, setTrezorStatus] = useState<TrezorStatus | null>(null);
 
   // ── Right-click context menu (rename / rescan / delete) ─────────
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
-  // The same portfolio can be visible in both the sidebar and the overview
-  // list at once — track *where* the rename started so only that one row
-  // switches into edit mode. Two simultaneously-autofocused inputs would
-  // otherwise steal focus from one another and instantly blur-commit,
-  // making rename look like it "does nothing".
-  const [renameSurface, setRenameSurface] = useState<"sidebar" | "overview" | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const [rowBusy, setRowBusy] = useState<string | null>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -203,8 +195,11 @@ export function ShellScreen() {
   });
   const orderPersistTimer = useRef<number | null>(null);
   const [editMode, setEditMode] = useState(false);
-  const [scanBusy, setScanBusy] = useState(false);
   const [txLedger, setTxLedger] = useState<LedgerEvent[] | null>(null);
+  const [recentActivity, setRecentActivity] = useState<RecentActivityItem[]>([]);
+  const [recentLoading, setRecentLoading] = useState(false);
+  const [expandedRecent, setExpandedRecent] = useState<string | null>(null);
+  const [copiedRecent, setCopiedRecent] = useState<string | null>(null);
   const sidebarListRef = useRef<HTMLDivElement>(null);
 
   function applyOrder(next: string[]) {
@@ -242,10 +237,6 @@ export function ShellScreen() {
     containerRef: sidebarListRef,
     enabled: editMode,
   });
-
-  function toggleOverviewExpanded(id: string) {
-    setExpandedOverview((prev) => ({ ...prev, [id]: !prev[id] }));
-  }
 
   function toggleSidebarExpanded(id: string) {
     setExpandedSidebar((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -313,12 +304,12 @@ export function ShellScreen() {
     setEditMode(false);
   }
 
-  function openContextMenu(e: React.MouseEvent, id: string, surface: "sidebar" | "overview") {
+  function openContextMenu(e: React.MouseEvent, id: string) {
     e.preventDefault();
     if (editMode) return;
     const x = Math.min(e.clientX, window.innerWidth - 200);
     const y = Math.min(e.clientY, window.innerHeight - 180);
-    setContextMenu({ id, x, y, surface });
+    setContextMenu({ id, x, y });
   }
 
   useEffect(() => {
@@ -346,12 +337,11 @@ export function ShellScreen() {
     return () => document.removeEventListener("keydown", onKey);
   }, [editMode]);
 
-  function startRename(id: string, name: string, surface: "sidebar" | "overview") {
+  function startRename(id: string, name: string) {
     setContextMenu(null);
     renameCommitInFlight.current = null;
     renameDraftRef.current = name;
     setRenameDraft(name);
-    setRenameSurface(surface);
     setRenamingId(id);
     window.setTimeout(() => renameInputRef.current?.select(), 0);
   }
@@ -366,7 +356,6 @@ export function ShellScreen() {
     const current = portfolios.find((p) => p.id === id);
     if (!next || !current || next === current.name) {
       setRenamingId(null);
-      setRenameSurface(null);
       renameCommitInFlight.current = null;
       return;
     }
@@ -379,7 +368,6 @@ export function ShellScreen() {
         prev.map((p) => (p.id === id ? { ...p, name: next } : p)),
       );
       setRenamingId(null);
-      setRenameSurface(null);
       try {
         await reloadList();
       } catch {
@@ -450,17 +438,43 @@ export function ShellScreen() {
     setBalances((prev) => applyLiveBalances(prev, [bal]));
   }
 
-  /** Scrape each portfolio on its own so one hung RPC can't block the rest. */
+  /** Scrape portfolios in parallel; apply once so the UI doesn't thrash.
+   *  Prioritize the selected wallet so Overview/Detail stay snappy. */
   async function reloadBalances() {
     const list = portfoliosRef.current;
     if (!list.length) return;
 
-    const jobs = list.map(async (p) => {
-      const bal = await scrapePortfolioBalance(p.id);
-      if (bal) setBalances((prev) => applyLiveBalances(prev, [bal]));
-    });
+    const selected = selectedIdRef.current;
+    const ordered = selected
+      ? [
+          ...list.filter((p) => p.id === selected),
+          ...list.filter((p) => p.id !== selected),
+        ]
+      : list;
 
-    await Promise.allSettled(jobs);
+    // Paint the open portfolio first when possible, then merge the rest.
+    if (selected) {
+      try {
+        const first = await scrapePortfolioBalance(selected);
+        if (first) {
+          setBalances((prev) => applyLiveBalances(prev, [first]));
+        }
+      } catch {
+        /* continue with full pass */
+      }
+    }
+
+    const rest = ordered.filter((p) => p.id !== selected);
+    const settled = await Promise.allSettled(
+      rest.map((p) => scrapePortfolioBalance(p.id)),
+    );
+    const next: PortfolioBalance[] = [];
+    for (const r of settled) {
+      if (r.status === "fulfilled" && r.value) next.push(r.value);
+    }
+    if (next.length) {
+      setBalances((prev) => applyLiveBalances(prev, next));
+    }
     lastBalancesFetchAt.current = Date.now();
   }
 
@@ -511,17 +525,17 @@ export function ShellScreen() {
     };
   }, [status?.phase]);
 
-  // Poll balances while visible. Scrapes themselves are fast now (~2–3s);
-  // don't hammer public RPCs every 1.5s on top of PortfolioDetail.
+  // Poll while visible. Focused refresh is snappy; idle poll is gentler so
+  // public RPCs aren't hammered into timeouts (which used to paint fake zeros).
   useEffect(() => {
     const maybeRefresh = () => {
       if (document.visibilityState !== "visible") return;
-      if (Date.now() - lastBalancesFetchAt.current < 2_500) return;
+      if (Date.now() - lastBalancesFetchAt.current < 4_000) return;
       lastBalancesFetchAt.current = Date.now();
       void reloadBalances();
     };
     maybeRefresh();
-    const tick = window.setInterval(maybeRefresh, 3_000);
+    const tick = window.setInterval(maybeRefresh, 6_000);
     window.addEventListener("focus", maybeRefresh);
     document.addEventListener("visibilitychange", maybeRefresh);
     return () => {
@@ -549,6 +563,21 @@ export function ShellScreen() {
       window.clearInterval(tick);
     };
   }, []);
+
+  // Play once when a Trezor appears after we already had a baseline (reconnect).
+  const trezorWasConnected = useRef<boolean | null>(null);
+  useEffect(() => {
+    const connected =
+      Boolean(trezorStatus?.available) && (trezorStatus?.device_count ?? 0) > 0;
+    if (trezorWasConnected.current === null) {
+      trezorWasConnected.current = connected;
+      return;
+    }
+    if (connected && !trezorWasConnected.current) {
+      playTrezorConnectedSound();
+    }
+    trezorWasConnected.current = connected;
+  }, [trezorStatus?.available, trezorStatus?.device_count]);
 
   // When a Trezor becomes connected and ready, automatically rescan for funded
   // accounts (quiet). Re-runs each time the device reconnects after being offline.
@@ -667,6 +696,7 @@ export function ShellScreen() {
     : undefined;
   const fiat = status?.fiat ?? "USD";
   const discreet = !!status?.discreet_mode;
+  const activityMinFiat = status?.activity_min_fiat ?? 0.02;
   const fiatPrices = useFiatPrices(fiat);
 
   useIncomingWatcher(
@@ -685,13 +715,13 @@ export function ShellScreen() {
     });
   }, [fiat]);
 
-  const totalFiat = useMemo(() => {
+  const liveTotalNum = useMemo(() => {
     let sum = 0;
     for (const b of balances) {
       sum += portfolioFiatSum(b, fiat, fiatPrices);
     }
-    return formatMoney(sum, fiat, discreet);
-  }, [balances, discreet, fiat, fiatPrices]);
+    return sum;
+  }, [balances, fiat, fiatPrices]);
 
   const chartHoldings = useMemo(() => {
     const map = new Map<string, number>();
@@ -717,9 +747,12 @@ export function ShellScreen() {
   useEffect(() => {
     if (!portfolios.length) {
       setTxLedger([]);
+      setRecentActivity([]);
+      setRecentLoading(false);
       return;
     }
     let cancelled = false;
+    setRecentLoading(true);
 
     const cached = loadOverviewLedger(portfolioIdsKey);
     if (cached?.length) {
@@ -745,6 +778,7 @@ export function ShellScreen() {
     }
 
     let merged: LedgerEvent[] = cached ? [...cached] : [];
+    const activityBag: RecentActivityItem[] = [];
 
     const ingest = (part: LedgerEvent[]) => {
       if (!part.length) return;
@@ -752,6 +786,16 @@ export function ShellScreen() {
       if (cancelled || !merged.length) return;
       setTxLedger([...merged]);
       saveOverviewLedger(portfolioIdsKey, merged);
+    };
+
+    const publishActivity = () => {
+      if (cancelled) return;
+      const sorted = [...activityBag].sort((a, b) => {
+        const ta = txTimestampDate(a.tx.timestamp)?.getTime() ?? 0;
+        const tb = txTimestampDate(b.tx.timestamp)?.getTime() ?? 0;
+        return tb - ta;
+      });
+      setRecentActivity(sorted);
     };
 
     void (async () => {
@@ -762,6 +806,16 @@ export function ShellScreen() {
             const rows = await api.portfolioHistory(p.id);
             if (cancelled) return;
             ingest(txsToLedger(rows));
+            for (const tx of rows) {
+              activityBag.push({
+                key: `${p.id}:${tx.txid}`,
+                portfolioId: p.id,
+                portfolioName: p.name,
+                chain: p.chain,
+                tx,
+              });
+            }
+            publishActivity();
           } catch {
             /* best-effort per portfolio */
           }
@@ -770,6 +824,8 @@ export function ShellScreen() {
       if (cancelled) return;
       // Still nothing after a full pass — empty chart, not infinite spinner.
       if (!merged.length) setTxLedger([]);
+      publishActivity();
+      setRecentLoading(false);
     })();
 
     return () => {
@@ -777,6 +833,22 @@ export function ShellScreen() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portfolioIdsKey]);
+
+  const recentVisible = useMemo(() => {
+    const byPortfolio = new Map<string, TxRow[]>();
+    for (const item of recentActivity) {
+      const list = byPortfolio.get(item.portfolioId) ?? [];
+      list.push(item.tx);
+      byPortfolio.set(item.portfolioId, list);
+    }
+    const kept = new Set<string>();
+    for (const [pid, rows] of byPortfolio) {
+      for (const tx of filterDustTxs(rows, activityMinFiat, fiatPrices)) {
+        kept.add(`${pid}:${tx.txid}`);
+      }
+    }
+    return recentActivity.filter((item) => kept.has(item.key)).slice(0, 5);
+  }, [recentActivity, activityMinFiat, fiatPrices]);
 
   // After leaving a portfolio, sync its balance back to the overview immediately.
   useEffect(() => {
@@ -797,30 +869,6 @@ export function ShellScreen() {
 
   function go(next: View) {
     setView(next);
-  }
-
-  async function scanSeedWallets() {
-    if (!seedReady || scanBusy) return;
-    setScanBusy(true);
-    try {
-      const found = await api.walletDiscoverPortfolios();
-      await reload();
-      notify({
-        kind: found.length ? "success" : "warning",
-        title: found.length ? t("seed.discoveredTitle") : t("shell.scanWallets"),
-        message: found.length
-          ? t("seed.discoveredBody", { count: found.length })
-          : t("shell.emptyPortfolios"),
-      });
-    } catch (e) {
-      notify({
-        kind: "error",
-        title: t("notifications.errorTitle"),
-        message: parseInvokeError(e).message,
-      });
-    } finally {
-      setScanBusy(false);
-    }
   }
 
   function openPortfolio(
@@ -909,7 +957,7 @@ export function ShellScreen() {
                   title={t("common.done", { defaultValue: "Done" })}
                   onClick={exitEditMode}
                 >
-                  <span style={{ fontSize: 11, fontWeight: 600 }}>{t("common.done", { defaultValue: "Done" })}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700 }}>{t("common.done", { defaultValue: "Done" })}</span>
                 </button>
               ) : portfolios.length >= 2 ? (
                 <button
@@ -998,7 +1046,7 @@ export function ShellScreen() {
                       ) : (
                         <span className="sidebar-portfolio__toggle-spacer" aria-hidden />
                       )}
-                      {renamingId === p.id && renameSurface === "sidebar" ? (
+                      {renamingId === p.id ? (
                         <div className="portfolio-item portfolio-item--renaming">
                           <span className="crypto-badge portfolio-item__icon">
                             <ChainIcon chain={p.chain} size={32} />
@@ -1023,7 +1071,6 @@ export function ShellScreen() {
                                 e.preventDefault();
                                 renameCommitInFlight.current = p.id;
                                 setRenamingId(null);
-                                setRenameSurface(null);
                                 window.setTimeout(() => {
                                   if (renameCommitInFlight.current === p.id) {
                                     renameCommitInFlight.current = null;
@@ -1041,7 +1088,7 @@ export function ShellScreen() {
                             if (editMode) return;
                             openPortfolio(p.id);
                           }}
-                          onContextMenu={(e) => openContextMenu(e, p.id, "sidebar")}
+                          onContextMenu={(e) => openContextMenu(e, p.id)}
                         >
                           <span className="crypto-badge portfolio-item__icon">
                             <ChainIcon chain={p.chain} size={32} />
@@ -1050,9 +1097,13 @@ export function ShellScreen() {
                           <span className="portfolio-item-meta">
                             {t(kindI18nKey(p.kind))}
                           </span>
-                          <span className="portfolio-item-bal">
-                            {portfolioFiat(bal, discreet, fiat, fiatPrices)}
-                          </span>
+                          <AnimatedMoney
+                            className="portfolio-item-bal"
+                            value={portfolioFiatSum(bal, fiat, fiatPrices)}
+                            fiat={fiat}
+                            discreet={discreet}
+                            snapKey={p.id}
+                          />
                         </button>
                       )}
                     </div>
@@ -1071,11 +1122,13 @@ export function ShellScreen() {
                                 <AssetIcon symbol={a.symbol} size={26} />
                               </span>
                               <span className="sidebar-token__sym">{a.symbol}</span>
-                              <span className="sidebar-token__bal">
-                                {discreet
-                                  ? "••••"
-                                  : formatMoney(assetFiatValue(a, fiat, fiatPrices), fiat, false)}
-                              </span>
+                              <AnimatedMoney
+                                className="sidebar-token__bal"
+                                value={assetFiatValue(a, fiat, fiatPrices)}
+                                fiat={fiat}
+                                discreet={discreet}
+                                snapKey={`${p.id}:${a.symbol}`}
+                              />
                             </button>
                           ))}
                         </div>
@@ -1118,6 +1171,16 @@ export function ShellScreen() {
               fiat={fiat}
               discreet={discreet}
               onAddPortfolio={() => go("add")}
+              onFundsMoved={(portfolioIds) => {
+                for (const id of portfolioIds) {
+                  invalidatePortfolioHistory(id);
+                }
+                invalidateOverviewLedger(portfolioIdsKey);
+                setTxLedger(null);
+                window.setTimeout(() => {
+                  void reloadBalances();
+                }, 8_000);
+              }}
             />
           ) : null}
           {view === "seed" && !seedReady ? (
@@ -1167,189 +1230,245 @@ export function ShellScreen() {
               <div className="home-page">
                 <div className="balance-hero">
                   <p className="total-label">{t("shell.totalLabel")}</p>
-                  <p className="total-value anim-balance">{totalFiat}</p>
+                  <AnimatedMoney
+                    as="p"
+                    className="total-value"
+                    value={liveTotalNum}
+                    fiat={fiat}
+                    discreet={discreet}
+                    snapKey="overview"
+                  />
                 </div>
 
                 <BalanceChart
                   holdings={chartHoldings}
                   ledger={txLedger}
+                  liveTotal={liveTotalNum}
                   fiat={fiat}
                   discreet={discreet}
                   height={172}
                 />
 
-                <div>
-                  <div className="assets-toolbar">
-                    <h3>{t("shell.portfolios")}</h3>
+                <AnalyticsPanel
+                  balances={balances}
+                  holdings={chartHoldings}
+                  ledger={txLedger}
+                  liveTotal={liveTotalNum}
+                  fiat={fiat}
+                  discreet={discreet}
+                  fiatPrices={fiatPrices}
+                  portfolioCount={portfolios.length}
+                  analyticsEnabled={status?.analytics_enabled !== false}
+                  tileOrder={status?.analytics_tile_order}
+                  hiddenTiles={status?.analytics_hidden_tiles}
+                />
+
+                <section className="recent-activity" aria-label={t("shell.recentActivity")}>
+                  <div className="recent-activity__head">
+                    <h3 className="recent-activity__heading">{t("shell.recentActivity")}</h3>
                   </div>
-                  {portfolios.length === 0 ? (
-                    <div className="empty-state" style={{ marginTop: 12 }}>
-                      <p style={{ margin: "0 0 12px" }}>{t("shell.emptyPortfolios")}</p>
-                      <div className="row" style={{ gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
-                        {seedReady ? (
-                          <button
-                            type="button"
-                            className="btn btn-primary"
-                            disabled={scanBusy}
-                            onClick={() => void scanSeedWallets()}
-                          >
-                            {scanBusy ? t("shell.scanningWallets") : t("shell.scanWallets")}
-                          </button>
-                        ) : null}
-                        <button
-                          type="button"
-                          className="btn"
-                          onClick={() => go("trezor-sync")}
-                        >
-                          {t("trezor.syncTitle", { defaultValue: "Sync my Trezor" })}
-                        </button>
-                      </div>
+                  {recentLoading && recentVisible.length === 0 ? (
+                    <div className="recent-activity__list" aria-busy="true">
+                      {[0, 1, 2].map((i) => (
+                        <div
+                          key={i}
+                          className="recent-activity__row--skel"
+                          aria-hidden
+                        />
+                      ))}
                     </div>
+                  ) : recentVisible.length === 0 ? (
+                    <p className="recent-activity__empty">{t("shell.recentActivityEmpty")}</p>
                   ) : (
-                    <div className="token-list anim-stagger" style={{ marginTop: 8 }}>
-                      {orderedPortfolios.map((p) => {
-                        const balRaw = balances.find((b) => b.portfolio_id === p.id);
-                        const bal = balRaw ? reconcilePendingSpend(balRaw) : undefined;
-                        const assets = portfolioAssets(bal);
-                        const tokens = tokensUnderPortfolio(assets, p.chain);
-                        const expandable = tokens.length > 0;
-                        const expanded = !!expandedOverview[p.id];
+                    <div className="recent-activity__list anim-stagger">
+                      {recentVisible.map((item) => {
+                        const dirRaw = item.tx.direction.toLowerCase();
+                        const dir =
+                          dirRaw.includes("in") || dirRaw.includes("recv")
+                            ? "in"
+                            : dirRaw.includes("out") || dirRaw.includes("send")
+                              ? "out"
+                              : "self";
+                        const title =
+                          dir === "in"
+                            ? t("portfolio.txTitle.in", { defaultValue: "Received" })
+                            : dir === "out"
+                              ? t("portfolio.txTitle.out", { defaultValue: "Sent" })
+                              : t("portfolio.txTitle.self", { defaultValue: "Self-transfer" });
+                        const timeLabel = formatTxTime(item.tx.timestamp);
+                        const sign = dir === "out" ? "−" : dir === "in" ? "+" : "";
+                        const expanded = expandedRecent === item.key;
+                        const counterpartyLabel =
+                          dir === "in"
+                            ? t("portfolio.txCounterparty.in")
+                            : t("portfolio.txCounterparty.out");
+                        const statusRaw = item.tx.status.toLowerCase();
+                        const statusKind = statusRaw.includes("fail")
+                          ? "failed"
+                          : statusRaw.includes("pending") || statusRaw.includes("unconfirmed")
+                            ? "pending"
+                            : "ok";
+                        const statusLabel =
+                          statusKind === "failed"
+                            ? t("portfolio.txFailed", { defaultValue: "Failed" })
+                            : statusKind === "pending"
+                              ? t("portfolio.txPending", { defaultValue: "Pending" })
+                              : t("portfolio.txConfirmed", { defaultValue: "Confirmed" });
                         return (
                           <div
-                            key={p.id}
-                            className={`portfolio-group${expanded ? " is-expanded" : ""}`}
+                            key={item.key}
+                            className={`recent-activity__item${expanded ? " is-expanded" : ""}`}
                           >
-                            <div className="portfolio-group__head">
-                              {expandable ? (
-                                <button
-                                  type="button"
-                                  className="portfolio-group__toggle"
-                                  aria-expanded={expanded}
-                                  aria-label={
-                                    expanded
-                                      ? t("shell.collapseTokens", { defaultValue: "Hide tokens" })
-                                      : t("shell.expandTokens", { defaultValue: "Show tokens" })
-                                  }
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    toggleOverviewExpanded(p.id);
-                                  }}
-                                >
-                                  <IconChevronDown size={20} />
-                                </button>
-                              ) : (
-                                <span className="portfolio-group__toggle-spacer" aria-hidden />
-                              )}
-                              {renamingId === p.id && renameSurface === "overview" ? (
-                                <div className="portfolio-group__main portfolio-group__main--renaming">
-                                  <span className="crypto-badge portfolio-group__icon">
-                                    <ChainIcon chain={p.chain} size={32} />
+                            <button
+                              type="button"
+                              className="recent-activity__summary"
+                              aria-expanded={expanded}
+                              onClick={() =>
+                                setExpandedRecent(expanded ? null : item.key)
+                              }
+                            >
+                              <span className={`recent-activity__icon recent-activity__icon--${dir}`} aria-hidden>
+                                {dir === "in" ? (
+                                  <TxIconReceived size={28} />
+                                ) : dir === "out" ? (
+                                  <TxIconSent size={28} />
+                                ) : (
+                                  <TxIconSelf size={28} />
+                                )}
+                              </span>
+                              <span className="recent-activity__copy">
+                                <span className="recent-activity__title">{title}</span>
+                                <span className="recent-activity__meta">
+                                  {item.portfolioName}
+                                  {timeLabel ? ` · ${timeLabel}` : ""}
+                                </span>
+                              </span>
+                              <span className="recent-activity__values">
+                                <span className={`recent-activity__qty recent-activity__qty--${dir}`}>
+                                  {discreet
+                                    ? "••••"
+                                    : `${sign}${formatAmount(item.tx.amount, false, 6)}`}
+                                </span>
+                                {!discreet ? (
+                                  <span className="recent-activity__asset">
+                                    <AssetIcon symbol={item.tx.symbol} size={14} />
+                                    <span>{item.tx.symbol}</span>
                                   </span>
-                                  <input
-                                    ref={renameInputRef}
-                                    className="control-input portfolio-group__rename"
-                                    autoFocus
-                                    value={renameDraft}
-                                    disabled={rowBusy === p.id}
-                                    onChange={(e) => {
-                                      renameDraftRef.current = e.target.value;
-                                      setRenameDraft(e.target.value);
-                                    }}
-                                    onBlur={() => void commitRename(p.id)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === "Enter") {
-                                        e.preventDefault();
-                                        (e.target as HTMLInputElement).blur();
-                                      }
-                                      if (e.key === "Escape") {
-                                        e.preventDefault();
-                                        renameCommitInFlight.current = p.id;
-                                        setRenamingId(null);
-                                        setRenameSurface(null);
-                                        window.setTimeout(() => {
-                                          if (renameCommitInFlight.current === p.id) {
-                                            renameCommitInFlight.current = null;
-                                          }
-                                        }, 120);
-                                      }
-                                    }}
-                                  />
-                                </div>
-                              ) : (
-                                <button
-                                  type="button"
-                                  className="portfolio-group__main"
-                                  onClick={() => openPortfolio(p.id)}
-                                  onContextMenu={(e) => openContextMenu(e, p.id, "overview")}
-                                >
-                                  <span className="crypto-badge portfolio-group__icon">
-                                    <ChainIcon chain={p.chain} size={32} />
-                                  </span>
-                                  <span className="token-row__meta">
-                                    <span className="token-row__name">{p.name}</span>
-                                    <span className="token-row__symbol">
-                                      {t(kindI18nKey(p.kind))}
-                                    </span>
-                                  </span>
-                                  <span className="token-row__values">
-                                    <span className="token-row__fiat">
-                                      {portfolioFiat(bal, discreet, fiat, fiatPrices)}
-                                    </span>
-                                    <span className="token-row__qty">
-                                      {portfolioQty(bal, discreet, p.chain.toUpperCase())}
-                                    </span>
-                                  </span>
-                                </button>
-                              )}
-                            </div>
-                            {expandable ? (
-                              <div
-                                className="portfolio-group__tokens"
-                                aria-hidden={!expanded}
-                              >
-                                <div className="portfolio-group__tokens-inner">
-                                  {tokens.map((a) => (
+                                ) : null}
+                              </span>
+                              <IconChevronDown size={16} className="recent-activity__chevron" />
+                            </button>
+                            <div
+                              className="recent-activity__details-wrap"
+                              aria-hidden={!expanded}
+                            >
+                              <div className="recent-activity__details-inner">
+                                <div className="recent-activity__details">
+                                  <dl className="tx-detail-list">
+                                    <div className="tx-detail-list__row">
+                                      <dt>{t("portfolio.asset", { defaultValue: "Asset" })}</dt>
+                                      <dd className="recent-activity__asset-dd">
+                                        <AssetIcon symbol={item.tx.symbol} size={18} />
+                                        <span>{item.tx.symbol}</span>
+                                      </dd>
+                                    </div>
+                                    <div className="tx-detail-list__row">
+                                      <dt>{t("portfolio.txid")}</dt>
+                                      <dd>
+                                        {item.tx.explorer_url ? (
+                                          <a
+                                            className="tx-row__txid-link mono"
+                                            href={item.tx.explorer_url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            title={t("portfolio.viewOnExplorer")}
+                                          >
+                                            {shortHash(item.tx.txid, 10, 8)}
+                                          </a>
+                                        ) : (
+                                          <span className="mono">
+                                            {shortHash(item.tx.txid, 10, 8)}
+                                          </span>
+                                        )}
+                                      </dd>
+                                    </div>
+                                    {item.tx.counterparty ? (
+                                      <div className="tx-detail-list__row">
+                                        <dt>{counterpartyLabel}</dt>
+                                        <dd>
+                                          <span className="mono">
+                                            {shortHash(item.tx.counterparty, 10, 8)}
+                                          </span>
+                                          <button
+                                            type="button"
+                                            className="tx-row__copy"
+                                            onClick={() => {
+                                              void navigator.clipboard.writeText(
+                                                item.tx.counterparty ?? "",
+                                              );
+                                              setCopiedRecent(item.tx.counterparty ?? "");
+                                              window.setTimeout(
+                                                () => setCopiedRecent(null),
+                                                1600,
+                                              );
+                                            }}
+                                          >
+                                            <IconCopy size={14} />
+                                            {copiedRecent === item.tx.counterparty
+                                              ? t("common.copied")
+                                              : t("common.copy")}
+                                          </button>
+                                        </dd>
+                                      </div>
+                                    ) : null}
+                                    <div className="tx-detail-list__row">
+                                      <dt>{t("portfolio.txStatus")}</dt>
+                                      <dd>
+                                        <span
+                                          className={`tx-row__badge tx-row__badge--${statusKind}`}
+                                        >
+                                          {statusLabel}
+                                        </span>
+                                      </dd>
+                                    </div>
+                                    {item.tx.fee ? (
+                                      <div className="tx-detail-list__row">
+                                        <dt>{t("portfolio.txFee")}</dt>
+                                        <dd>
+                                          {formatQty(item.tx.fee, item.tx.symbol, discreet, 8)}
+                                        </dd>
+                                      </div>
+                                    ) : null}
+                                  </dl>
+                                  <div className="recent-activity__detail-actions">
                                     <button
-                                      key={a.symbol}
                                       type="button"
-                                      className="token-row token-row--nested"
-                                      tabIndex={expanded ? 0 : -1}
-                                      onClick={() => openPortfolio(p.id)}
+                                      className="btn btn-sm"
+                                      onClick={() =>
+                                        openPortfolio(item.portfolioId, "history")
+                                      }
                                     >
-                                      <span className="crypto-badge">
-                                        <AssetIcon symbol={a.symbol} size={28} />
-                                      </span>
-                                      <span className="token-row__meta">
-                                        <span className="token-row__name">{a.symbol}</span>
-                                        <span className="token-row__symbol">
-                                          {p.chain.toUpperCase()}
-                                        </span>
-                                      </span>
-                                      <span className="token-row__values">
-                                        <span className="token-row__fiat">
-                                          {formatMoney(assetFiatValue(a, fiat, fiatPrices), fiat, discreet)}
-                                        </span>
-                                        <span className="token-row__qty">
-                                          {formatQty(a.amount, a.symbol, discreet)}
-                                        </span>
-                                      </span>
+                                      {t("shell.viewInPortfolio", {
+                                        defaultValue: "View in portfolio",
+                                      })}
                                     </button>
-                                  ))}
+                                  </div>
                                 </div>
                               </div>
-                            ) : null}
+                            </div>
                           </div>
                         );
                       })}
                     </div>
                   )}
-                </div>
+                </section>
               </div>
             </div>
           ) : null}
 
           {view === "portfolio" && selected ? (
             <PortfolioDetail
+              key={selected.id}
               portfolio={selected}
               balance={selectedBal}
               initialTab={detailTab}
@@ -1379,7 +1498,7 @@ export function ShellScreen() {
             role="menuitem"
             onClick={() => {
               const p = portfolios.find((x) => x.id === contextMenu.id);
-              if (p) startRename(p.id, p.name, contextMenu.surface);
+              if (p) startRename(p.id, p.name);
             }}
           >
             {t("portfolio.rename")}

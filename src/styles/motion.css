@@ -1,70 +1,6 @@
-/* Intentional motion — presence & hierarchy */
+/* Opal motion — three jobs: enter, step, press/confirm */
 
-@keyframes opal-fade-up {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes opal-fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes opal-token-in {
-  from {
-    opacity: 0;
-    transform: translateY(-6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes opal-slide-in-left {
-  from {
-    opacity: 0;
-    transform: translateX(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@keyframes opal-wizard-slide-fwd {
-  from {
-    opacity: 0;
-    transform: translateX(28px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@keyframes opal-wizard-slide-back {
-  from {
-    opacity: 0;
-    transform: translateX(-28px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@keyframes opal-wizard-fade-fwd {
+@keyframes opal-enter {
   from {
     opacity: 0;
     transform: translateY(8px);
@@ -75,21 +11,43 @@
   }
 }
 
-@keyframes opal-wizard-fade-back {
+@keyframes opal-enter-out {
   from {
-    opacity: 0;
-    transform: translateY(-6px);
-  }
-  to {
     opacity: 1;
     transform: translateY(0);
   }
+  to {
+    opacity: 0;
+    transform: translateY(8px);
+  }
 }
 
-@keyframes opal-scale-in {
+@keyframes opal-step-fwd {
   from {
     opacity: 0;
-    transform: scale(0.94);
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes opal-step-back {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes opal-confirm {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
   }
   to {
     opacity: 1;
@@ -97,105 +55,76 @@
   }
 }
 
-@keyframes opal-balance-settle {
+@keyframes opal-notification-timer {
   from {
-    opacity: 0.4;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes opal-tab-ink {
-  from {
-    transform: scaleX(0.35);
-    opacity: 0.3;
-  }
-  to {
     transform: scaleX(1);
-    opacity: 1;
+  }
+  to {
+    transform: scaleX(0);
   }
 }
 
-@keyframes opal-icon-pop {
-  0% {
-    transform: scale(0.86);
-    opacity: 0;
-  }
-  70% {
-    transform: scale(1.05);
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
+/* ── Public classes ─────────────────────────────── */
 
-.anim-shell-enter {
-  animation: opal-fade-in 280ms ease both;
-}
-
-.anim-sidebar-enter {
-  animation: opal-slide-in-left 340ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-.anim-page {
-  animation: opal-fade-up 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
+.anim-shell-enter,
+.anim-sidebar-enter,
+.anim-page,
 .anim-balance {
-  animation: opal-balance-settle 400ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: opal-enter var(--dur) var(--ease-out) both;
 }
 
-.anim-icon {
-  animation: opal-icon-pop 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+.anim-icon,
+.anim-confirm {
+  animation: opal-confirm var(--dur) var(--ease-out) both;
+}
+
+.anim-confirm {
+  display: inline-block;
 }
 
 .anim-stagger > * {
-  animation: opal-fade-up 340ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: opal-enter var(--dur) var(--ease-out) both;
 }
 
 .anim-stagger > *:nth-child(1) {
   animation-delay: 20ms;
 }
 .anim-stagger > *:nth-child(2) {
-  animation-delay: 45ms;
+  animation-delay: 40ms;
 }
 .anim-stagger > *:nth-child(3) {
-  animation-delay: 70ms;
+  animation-delay: 60ms;
 }
 .anim-stagger > *:nth-child(4) {
-  animation-delay: 95ms;
+  animation-delay: 80ms;
 }
 .anim-stagger > *:nth-child(5) {
-  animation-delay: 120ms;
+  animation-delay: 100ms;
 }
 .anim-stagger > *:nth-child(6) {
-  animation-delay: 145ms;
+  animation-delay: 120ms;
 }
 .anim-stagger > *:nth-child(7) {
-  animation-delay: 170ms;
+  animation-delay: 140ms;
 }
 .anim-stagger > *:nth-child(8) {
-  animation-delay: 195ms;
+  animation-delay: 160ms;
 }
 .anim-stagger > *:nth-child(9) {
-  animation-delay: 220ms;
+  animation-delay: 180ms;
 }
 .anim-stagger > *:nth-child(10) {
-  animation-delay: 245ms;
+  animation-delay: 200ms;
 }
 .anim-stagger > *:nth-child(11) {
-  animation-delay: 270ms;
+  animation-delay: 220ms;
 }
 .anim-stagger > *:nth-child(12) {
-  animation-delay: 295ms;
+  animation-delay: 240ms;
 }
 
 .anim-chain-grid > * {
-  animation: opal-scale-in 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: opal-enter var(--dur) var(--ease-out) both;
 }
 
 .anim-chain-grid > *:nth-child(1) {
@@ -226,50 +155,15 @@
   animation-delay: 180ms;
 }
 
-.nav-tab.is-active::after {
-  content: "";
-  position: absolute;
-  left: 14px;
-  right: 14px;
-  bottom: -1px;
-  height: 2px;
-  background: var(--accent);
-  transform-origin: center;
-  animation: opal-tab-ink 200ms ease both;
+.wizard-pane--fwd,
+.auth-wizard-pane--fwd {
+  animation: opal-step-fwd var(--dur-step) var(--ease-out) both;
 }
 
-@keyframes opal-notification-in {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.wizard-pane--back,
+.auth-wizard-pane--back {
+  animation: opal-step-back var(--dur-step) var(--ease-out) both;
 }
-
-@keyframes opal-notification-out {
-  from {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  to {
-    opacity: 0;
-    transform: translateY(-6px);
-  }
-}
-
-@keyframes opal-notification-timer {
-  from {
-    transform: scaleX(1);
-  }
-  to {
-    transform: scaleX(0);
-  }
-}
-
-
 
 @media (prefers-reduced-motion: reduce) {
   .anim-shell-enter,
@@ -277,12 +171,28 @@
   .anim-page,
   .anim-balance,
   .anim-icon,
+  .anim-confirm,
   .anim-stagger > *,
   .anim-chain-grid > *,
-  .nav-tab.is-active::after,
+  .wizard-pane--fwd,
+  .wizard-pane--back,
+  .auth-wizard-pane--fwd,
+  .auth-wizard-pane--back,
   .auth-atmosphere,
+  .auth-compose,
+  .auth-wizard,
+  .auth-brand,
+  .auth-headline,
+  .auth-lede,
+  .auth-compose__body,
+  .auth-footnote,
   .portfolio-group.is-expanded .token-row--nested,
-  .sidebar-portfolio.is-expanded .sidebar-token {
+  .sidebar-portfolio.is-expanded .sidebar-token,
+  .notification.is-enter,
+  .notification.is-leaving,
+  .context-menu-floating,
+  .select__menu,
+  .swap-pick__menu {
     animation: none !important;
   }
 
@@ -290,13 +200,11 @@
   .sidebar-portfolio__tokens,
   .portfolio-group__toggle,
   .sidebar-portfolio__toggle,
-  .wizard-pane--fwd,
-  .wizard-pane--back,
-  .auth-wizard-pane--fwd,
-  .auth-wizard-pane--back,
   .tx-row__details-wrap,
   .tx-row__chevron,
   .tx-row__icon,
+  .recent-activity__details-wrap,
+  .recent-activity__chevron,
   .swap-pick__tokens-wrap {
     animation: none !important;
     transition: none !important;
@@ -304,6 +212,7 @@
 
   .primary-actions .action-btn:active:not(:disabled),
   .btn:active:not(:disabled),
+  .icon-btn:active,
   .switch__thumb {
     transform: none;
   }
@@ -316,14 +225,14 @@
   .icon-btn,
   .switch,
   .segmented__item,
-  .settings-nav__item,
   .field input,
   .control-input,
   .control-select,
-  .swap-cta,
-  .swap-presets__btn,
+  .period-chip,
   .swap-pick__trigger,
-  .swap-pick__chevron {
+  .swap-pick__chevron,
+  .select__trigger,
+  .to-field {
     transition: none !important;
   }
 }

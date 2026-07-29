@@ -65,8 +65,31 @@ type Props = {
    * - `LedgerEvent[]` → reconstruct from real txs
    */
   ledger?: LedgerEvent[] | null;
+  /**
+   * Live portfolio fiat total (same source as the hero number). When set, the
+   * chart tip is pinned to this value so CoinGecko candle lag can't disagree
+   * with the balance headline.
+   */
+  liveTotal?: number;
   leadingControl?: ReactNode;
 };
+
+/** Force the last point onto the live headline total. */
+function pinSeriesTip(points: ChartPoint[], liveTotal: number | undefined): ChartPoint[] {
+  if (
+    liveTotal == null ||
+    !Number.isFinite(liveTotal) ||
+    liveTotal < 0 ||
+    points.length < 1
+  ) {
+    return points;
+  }
+  const out = points.slice();
+  const last = out[out.length - 1];
+  if (Math.abs(last.v - liveTotal) < 1e-9) return points;
+  out[out.length - 1] = { t: last.t, v: liveTotal };
+  return out;
+}
 
 function clipToPeriod(points: ChartPoint[], days: number): ChartPoint[] {
   if (!points.length) return points;
@@ -115,8 +138,7 @@ function patchSeriesTip(
   useHistory: boolean,
 ): ChartPoint[] | null {
   if (prev.length < 2) return null;
-  // Never tip-patch growth when a held coin still has no ledger events —
-  // that rewrites only the last point to full fiat and creates a spike.
+  // Growth tip-patch only when every held coin has ledger coverage.
   if (useHistory && Array.isArray(ledger)) {
     const held = holdings.filter((h) => h.amount > 0);
     if (
@@ -134,19 +156,20 @@ function patchSeriesTip(
   const out = prev.slice();
   const last = out[out.length - 1];
   // Reject tip jumps that look like incomplete-history spikes (near-zero
-  // path then full balance).
-  const median = (() => {
-    const vals = out.slice(0, -1).map((p) => p.v).sort((a, b) => a - b);
-    if (!vals.length) return last.v;
-    return vals[Math.floor(vals.length / 2)] ?? last.v;
-  })();
-  if (
-    useHistory &&
-    median >= 0 &&
-    nextTip.v > median * 4 + 1 &&
-    median < nextTip.v * 0.25
-  ) {
-    return null;
+  // path then full balance) — only in growth mode.
+  if (useHistory) {
+    const median = (() => {
+      const vals = out.slice(0, -1).map((p) => p.v).sort((a, b) => a - b);
+      if (!vals.length) return last.v;
+      return vals[Math.floor(vals.length / 2)] ?? last.v;
+    })();
+    if (
+      median >= 0 &&
+      nextTip.v > median * 4 + 1 &&
+      median < nextTip.v * 0.25
+    ) {
+      return null;
+    }
   }
   // Same timeframe tip → just rewrite the value (balance moved).
   if (Math.abs(toChartMs(last.t) - toChartMs(nextTip.t)) < 120_000) {
@@ -168,6 +191,7 @@ export function BalanceChart({
   height = 168,
   className,
   ledger,
+  liveTotal,
   leadingControl,
 }: Props) {
   const { t } = useTranslation();
@@ -184,10 +208,22 @@ export function BalanceChart({
   const ledgerReady = Array.isArray(ledger);
   const ledgerPending = useHistory && !ledgerReady;
   const hasHoldings = holdings.some((h) => h.amount > 0);
-  // Empty ledger with holdings = no real growth path. Never invent MTM.
+  // Empty ledger with holdings = no real growth path. Use MTM (price×balance)
+  // so the tip still tracks the live total instead of a blank chart.
   const emptyGrowth =
     useHistory && ledgerReady && hasHoldings && (ledger?.length ?? 0) === 0;
-  // Only `null` (still fetching) blocks paint. Empty completed ledger → noData.
+  // Held coins missing from the ledger → growth would under-count then tip-spike.
+  // Fall back to mark-to-market until history catches up.
+  const incompleteGrowth =
+    useHistory &&
+    ledgerReady &&
+    hasHoldings &&
+    !emptyGrowth &&
+    holdings.some(
+      (h) => h.amount > 0 && !(ledger as LedgerEvent[]).some((e) => e.coinId === h.coinId),
+    );
+  const effectiveHistory = useHistory && !emptyGrowth && !incompleteGrowth;
+  // Only `null` (still fetching) blocks paint.
   const blockPaint = ledgerPending;
 
   const coinKey = useMemo(
@@ -202,11 +238,12 @@ export function BalanceChart({
   const ledgerKey = useMemo(() => {
     if (!useHistory) return "price";
     if (ledgerPending) return "pending";
+    if (emptyGrowth || incompleteGrowth) return "mtm";
     return `${ledger!.length}:${ledger!
       .slice(0, 8)
       .map((e) => `${e.t}:${e.coinId}:${e.delta}`)
       .join("|")}`;
-  }, [useHistory, ledgerPending, ledger]);
+  }, [useHistory, ledgerPending, emptyGrowth, incompleteGrowth, ledger]);
 
   const amountsKey = useMemo(
     () =>
@@ -238,13 +275,13 @@ export function BalanceChart({
 
   // Hydrate persisted series as soon as shape is known (revisit / remount).
   useEffect(() => {
-    if (blockPaint || emptyGrowth) return;
+    if (blockPaint) return;
     const hit = hydrateSeriesCache(shapeKey);
     if (hit && hit.length >= 2) {
       setPoints(hit);
       setLoading(false);
     }
-  }, [shapeKey, blockPaint, emptyGrowth]);
+  }, [shapeKey, blockPaint]);
 
   useEffect(() => {
     if (!hasHoldings) {
@@ -304,26 +341,20 @@ export function BalanceChart({
 
   // Build or patch the visible series from cached prices.
   useEffect(() => {
-    // Pending ledger / incomplete history: wipe any prior series so we never
-    // keep a price-MTM path on screen and then tip-patch real balance onto it.
+    // Keep the last good series on screen while ledger is still loading —
+    // wiping caused a loading flash and made the chart feel broken.
     if (blockPaint) {
-      if (points.length) setPoints([]);
-      setLoading(true);
-      return;
-    }
-    if (emptyGrowth) {
-      setPoints([]);
-      setLoading(false);
-      setError(false);
       return;
     }
     if (!pricesReady) return;
 
     const charts = chartsDataCache.get(priceKey);
     if (!charts || Object.keys(charts).length === 0) {
-      setPoints([]);
-      setLoading(false);
-      setError(true);
+      if (!points.length) {
+        setPoints([]);
+        setLoading(false);
+        setError(true);
+      }
       return;
     }
 
@@ -332,19 +363,8 @@ export function BalanceChart({
     const led = ledgerRef.current;
 
     // Tip-patch only within the same growth/price shape — never across modes.
-    if (cached && cached.length >= 2 && ledgerKey !== "price" && ledgerKey !== "pending") {
-      const patched = patchSeriesTip(cached, h, led, charts, useHistory);
-      if (patched) {
-        const clipped = clipToPeriod(patched, Number(period));
-        seriesCache.set(shapeKey, clipped);
-        persistSeries(shapeKey, clipped);
-        setPoints(clipped);
-        setLoading(false);
-        setError(false);
-        return;
-      }
-    } else if (cached && cached.length >= 2 && !useHistory) {
-      const patched = patchSeriesTip(cached, h, led, charts, false);
+    if (cached && cached.length >= 2) {
+      const patched = patchSeriesTip(cached, h, led, charts, effectiveHistory);
       if (patched) {
         const clipped = clipToPeriod(patched, Number(period));
         seriesCache.set(shapeKey, clipped);
@@ -356,7 +376,7 @@ export function BalanceChart({
       }
     }
 
-    const raw = useHistory
+    const raw = effectiveHistory
       ? buildBalanceHistorySeries(h, led as LedgerEvent[], charts)
       : buildPortfolioSeries(h, charts);
     const series = clipToPeriod(raw, Number(period));
@@ -367,18 +387,36 @@ export function BalanceChart({
     setError(false);
     // amountsKey intentionally included so tip patches when balance moves
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shapeKey, amountsKey, pricesReady, priceKey, blockPaint, emptyGrowth, useHistory, period, ledgerKey]);
+  }, [
+    shapeKey,
+    amountsKey,
+    pricesReady,
+    priceKey,
+    blockPaint,
+    emptyGrowth,
+    incompleteGrowth,
+    effectiveHistory,
+    period,
+    ledgerKey,
+  ]);
 
-  const changeRaw = seriesChangePct(points);
-  const changeAbsRaw = seriesChangeAbs(points);
-  const hasSeries = points.length > 0;
+  // Display series: tip always matches the hero live total (spot), not a
+  // stale CoinGecko candle that can be tens of dollars off.
+  const displayPoints = useMemo(
+    () => pinSeriesTip(points, liveTotal),
+    [points, liveTotal],
+  );
+
+  const changeRaw = seriesChangePct(displayPoints);
+  const changeAbsRaw = seriesChangeAbs(displayPoints);
+  const hasSeries = displayPoints.length > 0;
   const change = changeRaw ?? (hasSeries ? 0 : null);
   const changeAbs = changeAbsRaw ?? (hasSeries ? 0 : null);
   const tone = change == null || change >= 0 ? "up" : "down";
   // blockPaint always wins — never keep a stale SOL-price series visible
   // while growth history is still loading.
-  const waiting = blockPaint || ((loading || !pricesReady) && !hasSeries && !emptyGrowth);
-  const showStatus = waiting || error || !hasSeries || emptyGrowth;
+  const waiting = blockPaint || ((loading || !pricesReady) && !hasSeries);
+  const showStatus = waiting || error || !hasSeries;
 
   return (
     <div className={`balance-chart ${className ?? ""}`}>
@@ -431,7 +469,7 @@ export function BalanceChart({
       </div>
       <div className={`balance-chart__frame${waiting ? " is-loading" : ""}`}>
         <AreaChart
-          points={discreet || waiting ? [] : points}
+          points={discreet || waiting ? [] : displayPoints}
           height={height}
           tone={tone}
           periodDays={Number(period)}

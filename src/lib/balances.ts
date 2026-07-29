@@ -59,10 +59,6 @@ export function cacheFiatPriceMatrix(matrix: Record<string, Record<string, numbe
   }
 }
 
-export function getCachedFiatPrices(fiat: string): Record<string, number> | undefined {
-  return fiatPriceCache.get(normFiat(fiat));
-}
-
 function scalePriceMap(
   prices: Record<string, number>,
   ratio: number,
@@ -133,33 +129,6 @@ export function portfolioFiatSum(
   return sum;
 }
 
-/** Revalue cached amounts with fresh spot prices (no chain scrape). */
-export function repriceAsset(asset: AssetBalance, prices: Record<string, number>): AssetBalance {
-  const coinId = coinIdForSymbol(asset.symbol);
-  const amt = Number(asset.amount);
-  if (!coinId || !Number.isFinite(amt)) return asset;
-  const price = prices[coinId];
-  if (price == null || !Number.isFinite(price)) return asset;
-  return { ...asset, usd: amt * price };
-}
-
-export function repricePortfolioBalance(
-  bal: PortfolioBalance,
-  prices: Record<string, number>,
-): PortfolioBalance {
-  return {
-    ...bal,
-    assets: assetsOf(bal).map((a) => repriceAsset(a, prices)),
-  };
-}
-
-export function repriceBalances(
-  balances: PortfolioBalance[],
-  prices: Record<string, number>,
-): PortfolioBalance[] {
-  return balances.map((b) => repricePortfolioBalance(b, prices));
-}
-
 function nativeSum(bal: PortfolioBalance): number {
   let sum = 0;
   for (const a of assetsOf(bal)) {
@@ -222,12 +191,14 @@ export function applyLiveBalances(
   for (const b of prev) map.set(b.portfolio_id, normalizeBalance(b));
   for (const b of clean) {
     const existing = map.get(b.portfolio_id);
-    // Ignore a totally empty failed scrape that would wipe a known balance.
+    // Failed / timed-out scrapes often arrive as empty assets OR a single
+    // native row at "0". Never let those wipe a known non-zero balance —
+    // except after an optimistic spend (user intentionally emptied).
     if (
       existing &&
       nativeSum(b) <= 1e-12 &&
       nativeSum(existing) > 1e-12 &&
-      assetsOf(b).length === 0
+      !hasPendingSpend(b.portfolio_id)
     ) {
       continue;
     }
@@ -239,36 +210,6 @@ export function applyLiveBalances(
     }
   }
   return [...map.values()];
-}
-
-/** Instant fiat switch using cached cross-rates (bitcoin pivot). */
-export function scaleBalancesFiatCross(
-  balances: PortfolioBalance[],
-  fromFiat: string,
-  toFiat: string,
-): PortfolioBalance[] | null {
-  const from = normFiat(fromFiat);
-  const to = normFiat(toFiat);
-  if (from === to) return balances;
-
-  const fromPrices = fiatPriceCache.get(from);
-  const toPrices = fiatPriceCache.get(to);
-  if (!fromPrices || !toPrices) return null;
-
-  const fromBtc = fromPrices.bitcoin;
-  const toBtc = toPrices.bitcoin;
-  if (!fromBtc || !toBtc || !Number.isFinite(fromBtc) || !Number.isFinite(toBtc)) {
-    return null;
-  }
-  const ratio = toBtc / fromBtc;
-  if (!Number.isFinite(ratio) || ratio <= 0) return null;
-
-  return balances.map((b) => ({
-    ...b,
-    assets: assetsOf(b).map((a) =>
-      a.usd != null && Number.isFinite(a.usd) ? { ...a, usd: a.usd * ratio } : a,
-    ),
-  }));
 }
 
 /** Subtract a spend from a local balance row (instant UI before RPC catches up). */

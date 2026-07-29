@@ -4,6 +4,7 @@ import QRCodeStyling from "qr-code-styling";
 import {
   api,
   canTrezorSend,
+  EVM_CHAINS,
   invalidatePortfolioHistory,
   isUtxoChain,
   parseInvokeError,
@@ -17,7 +18,9 @@ import {
   type TxRow,
 } from "../lib/api";
 import { copyWithAutoClear } from "../lib/clipboard";
+import { invalidateOverviewLedger } from "../lib/chartCache";
 import { BalanceChart } from "../components/BalanceChart";
+import { AnimatedMoney } from "../components/AnimatedMoney";
 import { AssetIcon, ChainIcon, chainTint } from "../components/CryptoIcons";
 import { ProcedureShell } from "../components/ProcedureShell";
 import { Select } from "../components/Select";
@@ -34,18 +37,30 @@ import {
   rememberOptimisticSpend,
 } from "../lib/balances";
 import { scrapePortfolioBalance } from "../lib/balanceScrape";
+import { playSendSound } from "../lib/sounds";
 import {
   chainLabel,
   formatAmount,
+  formatCompactAmount,
   formatMoney,
   formatQty,
+  shortHash,
 } from "../lib/format";
+import { TxIconSent } from "../components/TxIcons";
 import { useVault } from "../state/vault";
 import { useNotify } from "../state/notifications";
 
 type Tab = "balances" | "receive" | "send" | "history";
-type SendStep = "to" | "amount" | "review";
+type SendStep = "to" | "amount" | "review" | "done";
 const SEND_STEPS: SendStep[] = ["to", "amount", "review"];
+
+type SendReceipt = {
+  to: string;
+  amountDisplay: string;
+  symbol: string;
+  txid: string;
+  explorerUrl: string;
+};
 
 function kindI18nKey(kind: string): string {
   if (kind === "software") return "portfolio.kindSoftware";
@@ -147,6 +162,7 @@ export function PortfolioDetail({
   const [sendMax, setSendMax] = useState(false);
   const [sendStep, setSendStep] = useState<SendStep>("to");
   const [sendDir, setSendDir] = useState<"forward" | "back">("forward");
+  const [sendReceipt, setSendReceipt] = useState<SendReceipt | null>(null);
 
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -207,6 +223,7 @@ export function PortfolioDetail({
     setTab(initialTab);
     setSendStep("to");
     setSendDir("forward");
+    setSendReceipt(null);
     setBalance(balanceProp);
     setBalanceLoading(!balanceProp);
     setAddress(balanceProp?.address ?? portfolio.address ?? "");
@@ -485,17 +502,33 @@ export function PortfolioDetail({
   const maxNative = selectedBalance?.amount ?? "0";
   const maxFiat = selectedBalance?.usd ?? 0;
 
-  /** Spendable native units after reserving an estimated network fee (UTXO native only). */
+  /** Estimated fee to leave behind when sweeping native (not tokens). */
+  const nativeFeeReserve = useMemo(() => {
+    if (token) return 0;
+    if (utxo && feeEstimate?.feeSats != null) {
+      return feeEstimate.feeSats / 1e8;
+    }
+    const c = portfolio.chain.toLowerCase();
+    if (c === "sol") {
+      // Base signature fee is 5000 lamports; backend re-sweeps with getFeeForMessage.
+      return feePreset === "priority" ? 0.00005 : 0.000005;
+    }
+    if (EVM_CHAINS.has(c)) {
+      // Conservative UI reserve; backend recomputes exact gas on send_max.
+      if (c === "arb" || c === "base" || c === "op") return 0.00005;
+      if (c === "bsc" || c === "polygon" || c === "avax") return 0.001;
+      return 0.0015;
+    }
+    if (c === "trx") return 1;
+    return 0;
+  }, [token, utxo, feeEstimate, portfolio.chain, feePreset]);
+
+  /** Spendable native units after reserving an estimated network fee. */
   const spendableNative = useMemo(() => {
     const bal = Number(maxNative);
     if (!Number.isFinite(bal) || bal <= 0) return 0;
-    const sendingNative = !token;
-    if (utxo && sendingNative && feeEstimate?.feeSats != null) {
-      const fee = feeEstimate.feeSats / 1e8;
-      return Math.max(0, bal - fee);
-    }
-    return bal;
-  }, [maxNative, utxo, token, feeEstimate]);
+    return Math.max(0, bal - nativeFeeReserve);
+  }, [maxNative, nativeFeeReserve]);
 
   const nativeAmount = useMemo(() => {
     if (!amount) return "";
@@ -510,8 +543,12 @@ export function PortfolioDetail({
   }, [amount, amountUnit, rate]);
 
   const amountNum = Number(nativeAmount);
+  // Max sweeps are fee-adjusted (and backend re-sweeps); don't block on float dust.
   const exceedsBalance =
-    Number.isFinite(amountNum) && amountNum > 0 && amountNum > spendableNative + 1e-12;
+    !sendMax &&
+    Number.isFinite(amountNum) &&
+    amountNum > 0 &&
+    amountNum > spendableNative + 1e-12;
   const addressValid = !!to.trim() && !!safety?.ok && !addressChecking;
   const amountValid =
     !!nativeAmount && Number.isFinite(amountNum) && amountNum > 0 && !exceedsBalance;
@@ -521,27 +558,41 @@ export function PortfolioDetail({
     const n = Number(amount);
     if (!Number.isFinite(n)) return null;
     if (amountUnit === "fiat") {
-      const native = n / rate;
-      return `≈ ${native.toFixed(8).replace(/0+$/, "").replace(/\.$/, "")} ${selectedSymbol}`;
+      return `≈ ${formatCompactAmount(n / rate, 4)} ${selectedSymbol}`;
     }
     return `≈ ${(n * rate).toFixed(2)} ${fiat}`;
   }, [amount, amountUnit, rate, fiat, selectedSymbol]);
 
-  function fillMax() {
-    setSendMax(utxo && !token);
+  function formatReceiptAmount(): string {
     if (amountUnit === "fiat") {
-      const fiatMax = rate ? spendableNative * rate : maxFiat;
-      if (fiatMax > 0) setAmount(fiatMax.toFixed(2));
-      return;
+      return `${formatCompactAmount(amount, 2)} ${fiat} ≈ ${formatCompactAmount(nativeAmount, 4)} ${selectedSymbol}`;
     }
-    if (spendableNative > 0) {
-      const raw =
-        spendableNative < 1
-          ? spendableNative.toFixed(8)
-          : String(spendableNative);
-      setAmount(raw.replace(/0+$/, "").replace(/\.$/, ""));
-    }
+    return `${formatCompactAmount(amount, 6)} ${selectedSymbol}`;
   }
+
+  function formatMaxAmount(native: number): string {
+    if (!(native > 0)) return "";
+    if (amountUnit === "fiat") {
+      const fiatMax = rate ? native * rate : maxFiat;
+      return fiatMax > 0 ? fiatMax.toFixed(2) : "";
+    }
+    const raw = native < 1 ? native.toFixed(9) : native.toFixed(8);
+    return raw.replace(/0+$/, "").replace(/\.$/, "");
+  }
+
+  function fillMax() {
+    setSendMax(!token);
+    const next = formatMaxAmount(spendableNative);
+    if (next) setAmount(next);
+  }
+
+  // Keep Max in sync when the fee estimate / preset changes.
+  useEffect(() => {
+    if (!sendMax || token || tab !== "send") return;
+    const next = formatMaxAmount(spendableNative);
+    if (next) setAmount(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sendMax, spendableNative, amountUnit, rate, token, tab]);
 
   function onAmountChange(raw: string) {
     setSendMax(false);
@@ -556,24 +607,22 @@ export function PortfolioDetail({
   async function submitSend() {
     if (!addressValid || !amountValid) return;
     setBusy(true);
+    const receiptTo = to.trim();
+    const receiptAmount = formatReceiptAmount();
+    const receiptSymbol = selectedSymbol;
     try {
       const sendAmt = Number(nativeAmount);
-      await api.portfolioSend({
+      const res = await api.portfolioSend({
         portfolioId: portfolio.id,
-        to: to.trim(),
+        to: receiptTo,
         amount: nativeAmount,
         token: token || null,
-        feePreset: utxo ? feePreset : null,
-        sendMax: sendMax && utxo && !token ? true : null,
+        feePreset: utxo || portfolio.chain.toLowerCase() === "sol" ? feePreset : null,
+        sendMax: sendMax && !token ? true : null,
       });
       // Instant client-side debit — don't wait for RPC scrape to show the spend.
       if (balance && Number.isFinite(sendAmt) && sendAmt > 0) {
-        const feeNative =
-          utxo && feeEstimate?.feeSats != null
-            ? feeEstimate.feeSats / 1e8
-            : portfolio.chain === "sol" && !token
-              ? 0.000005
-              : 0;
+        const feeNative = !token ? nativeFeeReserve : 0;
         const next = applyOptimisticSpend(balance, {
           assetSymbol: token || symbol,
           amount: sendAmt,
@@ -585,12 +634,21 @@ export function PortfolioDetail({
         setSendBalance(next);
         onBalanceChange?.(next);
       }
-      setSendStep("to");
+      setSendReceipt({
+        to: receiptTo,
+        amountDisplay: receiptAmount,
+        symbol: receiptSymbol,
+        txid: res.txid,
+        explorerUrl: res.explorer_url,
+      });
+      playSendSound();
       setSendDir("forward");
+      setSendStep("done");
       setTo("");
       setAmount("");
       setSendMax(false);
       invalidatePortfolioHistory(portfolio.id);
+      invalidateOverviewLedger();
       void loadHistory();
       // Refresh portfolio list/history, but skip an immediate live scrape —
       // RPC often still returns the pre-send balance and desyncs the sidebar.
@@ -620,9 +678,10 @@ export function PortfolioDetail({
     }
   }
 
-  const portfolioTotal = useMemo(() => {
-    return formatMoney(portfolioFiatSum(balance, fiat, fiatPrices), fiat, discreet);
-  }, [balance, discreet, fiat, fiatPrices]);
+  const portfolioTotalNum = useMemo(
+    () => portfolioFiatSum(balance, fiat, fiatPrices),
+    [balance, fiat, fiatPrices],
+  );
 
   const primaryQty = useMemo(() => {
     const assets = assetsOf(balance);
@@ -645,15 +704,15 @@ export function PortfolioDetail({
   }, [balance, portfolio.chain]);
 
   const chartLedger = useMemo(() => txsToLedger(history), [history]);
-  // `null` only while history is still fetching. Empty txs → `[]` (noData),
-  // never keep growth mode spinning forever / never invent MTM.
-  // Held coin with no matching ledger events → empty (noData), not a 0→full tip spike.
-  const growthLedger: ReturnType<typeof txsToLedger> | null = useMemo(() => {
+  // `null` while history is fetching. Incomplete ledger (held coin with no
+  // txs yet) → fall back to mark-to-market via `undefined` so the tip always
+  // matches the live balance instead of a 0→full spike or a stuck low tip.
+  const growthLedger: ReturnType<typeof txsToLedger> | null | undefined = useMemo(() => {
     if (historyLoading) return null;
     const heldMissing = chartHoldings.some(
       (h) => h.amount > 0 && !chartLedger.some((e) => e.coinId === h.coinId),
     );
-    if (heldMissing) return [];
+    if (heldMissing) return undefined;
     return chartLedger;
   }, [historyLoading, chartHoldings, chartLedger]);
 
@@ -687,9 +746,20 @@ export function PortfolioDetail({
     setTab(k);
     setSendStep("to");
     setSendDir("forward");
+    setSendReceipt(null);
+  }
+
+  function resetSendForm() {
+    setSendReceipt(null);
+    setSendDir("forward");
+    setSendStep("to");
+    setTo("");
+    setAmount("");
+    setSendMax(false);
   }
 
   function sendGoBack() {
+    if (sendStep === "done") return;
     const idx = SEND_STEPS.indexOf(sendStep);
     setSendDir("back");
     if (idx <= 0) return;
@@ -709,17 +779,19 @@ export function PortfolioDetail({
       setSendStep("review");
       return;
     }
-    void submitSend();
+    if (sendStep === "review") {
+      void submitSend();
+    }
   }
 
   return (
-    <div className={`content content-wide asset-page${tab === "history" ? " asset-page--history" : ""}`}>
+    <div className="content content-wide asset-page">
       <div className="asset-top">
         <span
           className="crypto-badge anim-icon"
           style={{ ["--chain-tint" as string]: chainTint(portfolio.chain) }}
         >
-          <ChainIcon chain={portfolio.chain} size={tab === "history" ? 40 : 48} />
+          <ChainIcon chain={portfolio.chain} size={48} />
         </span>
         <div className="asset-top__copy">
           <h2 className="portfolio-title">{portfolio.name}</h2>
@@ -730,46 +802,56 @@ export function PortfolioDetail({
       </div>
 
       <div className="asset-price">
-        <p className="asset-price__fiat anim-balance">{portfolioTotal}</p>
-        {tab !== "history" ? <p className="asset-price__qty">{primaryQty}</p> : null}
-        {!canSpend && portfolio.kind !== "watch_only" && tab !== "history" ? (
+        <AnimatedMoney
+          as="p"
+          className="asset-price__fiat"
+          value={portfolioTotalNum}
+          fiat={fiat}
+          discreet={discreet}
+          snapKey={`${portfolio.id}:${balance ? "ready" : "empty"}`}
+        />
+        <p className="asset-price__qty">{primaryQty}</p>
+        {!canSpend && portfolio.kind !== "watch_only" ? (
           <p className="spend-note no-spend">{t(spendKey)}</p>
         ) : null}
       </div>
 
-      {tab !== "history" ? (
-        <div className="asset-page-chart">
-          <BalanceChart
-            holdings={chartMode === "price" ? priceHoldings : chartHoldings}
-            ledger={chartMode === "growth" ? growthLedger : undefined}
-            fiat={fiat}
-            discreet={discreet}
-            height={160}
-            leadingControl={
-              <div className="chart-mode-toggle" role="tablist">
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={chartMode === "price"}
-                  className={`chart-mode-toggle__item${chartMode === "price" ? " is-active" : ""}`}
-                  onClick={() => setChartMode("price")}
-                >
-                  {symbol}
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={chartMode === "growth"}
-                  className={`chart-mode-toggle__item${chartMode === "growth" ? " is-active" : ""}`}
-                  onClick={() => setChartMode("growth")}
-                >
-                  {t("chart.portfolioGrowth", { defaultValue: "Portfolio" })}
-                </button>
-              </div>
-            }
-          />
-        </div>
-      ) : null}
+      <div className="asset-page-chart">
+        <BalanceChart
+          holdings={chartMode === "price" ? priceHoldings : chartHoldings}
+          ledger={chartMode === "growth" ? growthLedger : undefined}
+          liveTotal={
+            chartMode === "growth"
+              ? portfolioFiatSum(balance, fiat, fiatPrices)
+              : undefined
+          }
+          fiat={fiat}
+          discreet={discreet}
+          height={160}
+          leadingControl={
+            <div className="chart-mode-toggle" role="tablist">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={chartMode === "price"}
+                className={`chart-mode-toggle__item${chartMode === "price" ? " is-active" : ""}`}
+                onClick={() => setChartMode("price")}
+              >
+                {symbol}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={chartMode === "growth"}
+                className={`chart-mode-toggle__item${chartMode === "growth" ? " is-active" : ""}`}
+                onClick={() => setChartMode("growth")}
+              >
+                {t("chart.portfolioGrowth", { defaultValue: "Portfolio" })}
+              </button>
+            </div>
+          }
+        />
+      </div>
 
       <nav className="nav-tabs secondary" aria-label={t("portfolio.tabsLabel")}>
         {(["balances", "receive", "send", "history"] as const).map((k) => (
@@ -805,7 +887,13 @@ export function PortfolioDetail({
                   </span>
                   <span className="amt">
                     {formatAmount(a.amount, discreet)}
-                    <span className="fiat">{formatMoney(assetFiatValue(a, fiat, fiatPrices), fiat, discreet)}</span>
+                    <AnimatedMoney
+                      className="fiat"
+                      value={assetFiatValue(a, fiat, fiatPrices)}
+                      fiat={fiat}
+                      discreet={discreet}
+                      snapKey={`${portfolio.id}:${a.symbol}:${balance ? "ready" : "empty"}`}
+                    />
                   </span>
                 </div>
               ))}
@@ -820,20 +908,26 @@ export function PortfolioDetail({
             {qrUri ? (
               <div className="qr-code qr-code--sm" ref={qrContainerRef} />
             ) : null}
-            <div className="receive-tab__addr">
+            <div className="receive-tab__panel">
+              <p className="receive-tab__label">{t("portfolio.receiveAddress", { defaultValue: "Your address" })}</p>
               <AddressEmphasis address={address} />
-              <div className="row" style={{ flexWrap: "wrap" }}>
+              <div className="receive-tab__actions">
                 <button
                   type="button"
-                  className="btn btn-primary"
+                  className="btn btn-primary receive-tab__copy"
                   onClick={() => void copyAddress()}
                 >
-                  {copied ? t("portfolio.copied") : t("portfolio.copy")}
+                  <span
+                    key={copied ? "copied" : "copy"}
+                    className={copied ? "anim-confirm" : undefined}
+                  >
+                    {copied ? t("portfolio.copied") : t("portfolio.copy")}
+                  </span>
                 </button>
                 {utxo && portfolio.kind === "software" ? (
                   <button
                     type="button"
-                    className="btn"
+                    className="btn receive-tab__next"
                     disabled={busy}
                     onClick={() => void nextAddress()}
                   >
@@ -853,254 +947,332 @@ export function PortfolioDetail({
               {t(spendKey)}
             </p>
           ) : null}
-          <ProcedureShell
-            ariaLabel={t("portfolio.send")}
-            direction={sendDir}
-            activeId={sendStep}
-            steps={[
-              { id: "to", label: t("portfolio.sendStepTo") },
-              { id: "amount", label: t("portfolio.sendStepAmount") },
-              { id: "review", label: t("portfolio.sendStepReview") },
-            ]}
-          >
-            {sendStep === "to" ? (
-              <>
-                <p className="section-desc" style={{ marginTop: 0 }}>
-                  {t("portfolio.sendToHint")}
+          {sendStep === "done" && sendReceipt ? (
+            <div className="send-done wizard-pane wizard-pane--fwd">
+              <div className="send-done__hero">
+                <TxIconSent size={48} className="send-done__emblem anim-icon" />
+                <h3 className="send-done__title">
+                  {t("portfolio.sendSentTitle", { defaultValue: "Transaction sent" })}
+                </h3>
+                <p className="send-done__amount">
+                  <span className="send-done__asset" aria-hidden>
+                    <AssetIcon symbol={sendReceipt.symbol} size={36} />
+                  </span>
+                  <span className="send-done__amount-text">{sendReceipt.amountDisplay}</span>
                 </p>
-                <div className="field">
-                  <label>{t("portfolio.to")}</label>
-                  <input
-                    value={to}
-                    onChange={(e) => setTo(e.target.value)}
-                    disabled={!canSpend}
-                    placeholder={exampleAddressForChain(portfolio.chain)}
-                    spellCheck={false}
-                    autoComplete="off"
-                    autoFocus
-                    className={
-                      to.trim() && safety && !safety.ok ? "is-invalid" : undefined
-                    }
-                    aria-invalid={to.trim() && safety ? !safety.ok : undefined}
-                  />
-                </div>
-                {addressBook.length > 0 ? (
-                  <Select
-                    label={t("portfolio.addressBook")}
-                    value=""
-                    placeholder={t("portfolio.pickContact")}
-                    onChange={(id) => {
-                      const entry = addressBook.find((x) => x.id === id);
-                      if (entry) setTo(entry.address);
-                    }}
-                    options={addressBook.map((e) => ({
-                      value: e.id,
-                      label: `${e.label} · ${e.address.slice(0, 10)}...`,
-                    }))}
-                  />
-                ) : null}
-                {to.trim() && addressChecking ? (
-                  <p className="field-hint">{t("portfolio.sendAddressChecking")}</p>
-                ) : null}
-                {safety ? (
-                  <div
-                    className={`safety-box${safety.ok ? "" : " safety-error"}${
-                      safety.ok && safety.warnings.length > 0 ? " safety-warn" : ""
-                    }`}
-                  >
-                    <AddressEmphasis address={to.trim()} />
-                    {safety.warnings.map((w) => (
-                      <p
-                        key={w}
-                        className="field-hint"
-                        style={{
-                          color: safety.ok ? "var(--warning)" : "var(--negative)",
-                        }}
-                      >
-                        {w}
-                      </p>
-                    ))}
-                    {safety.ok && safety.warnings.length === 0 ? (
-                      <p className="field-hint" style={{ color: "var(--positive)" }}>
-                        {t("portfolio.sendAddressOk")}
-                      </p>
-                    ) : null}
-                  </div>
-                ) : null}
-              </>
-            ) : null}
+              </div>
 
-            {sendStep === "amount" ? (
-              <>
-                <p className="section-desc" style={{ marginTop: 0 }}>
-                  {t("portfolio.sendAmountHint")}
-                </p>
-                {hasTokens ? (
-                  <Select
-                    className="select--asset"
-                    label={t("portfolio.asset", { defaultValue: "Asset" })}
-                    value={token}
-                    onChange={(v) => {
-                      setToken(v);
-                      setSendMax(false);
-                      setAmount("");
-                    }}
-                    options={assetOptions}
-                  />
-                ) : null}
-                <div className="field">
-                  <div className="field-label-row">
-                    <label>{t("portfolio.amount")}</label>
-                    {rate ? (
-                      <div
-                        className="segmented segmented--2 segmented--sm"
-                        role="radiogroup"
-                        aria-label={t("portfolio.amountUnit", { defaultValue: "Amount unit" })}
+              <dl className="send-done__meta">
+                <div className="send-done__meta-row">
+                  <dt>{t("portfolio.to")}</dt>
+                  <dd className="mono">{shortHash(sendReceipt.to, 6, 6)}</dd>
+                </div>
+                <div className="send-done__meta-row">
+                  <dt>{t("portfolio.txid")}</dt>
+                  <dd>
+                    {sendReceipt.explorerUrl ? (
+                      <a
+                        className="send-done__txid-link mono"
+                        href={sendReceipt.explorerUrl}
+                        target="_blank"
+                        rel="noreferrer"
                       >
-                        {(["native", "fiat"] as const).map((u) => (
-                          <button
-                            key={u}
-                            type="button"
-                            role="radio"
-                            aria-checked={amountUnit === u}
-                            className={`segmented__item${amountUnit === u ? " is-active" : ""}`}
-                            onClick={() => {
-                              setAmountUnit(u);
-                              setSendMax(false);
-                              setAmount("");
-                            }}
-                          >
-                            {u === "native" ? selectedSymbol : fiat}
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                  <div className={`amount-input-group${exceedsBalance ? " is-invalid" : ""}`}>
-                    <span className="amount-input-group__unit">
-                      {amountUnit === "native" ? selectedSymbol : fiat}
-                    </span>
-                    <input
-                      value={amount}
-                      inputMode="decimal"
-                      placeholder="0"
-                      onChange={(e) => onAmountChange(e.target.value)}
-                      autoFocus
-                      aria-invalid={exceedsBalance || undefined}
-                    />
-                  </div>
-                  <div className="field-hint-row">
-                    {exceedsBalance ? (
-                      <p className="field-hint field-hint--error">
-                        {t("portfolio.sendExceedsBalance")}
-                      </p>
-                    ) : fiatHelper ? (
-                      <p className="field-hint">{fiatHelper}</p>
+                        {shortHash(sendReceipt.txid, 8, 6)}
+                      </a>
                     ) : (
-                      <span />
+                      <span className="mono">{shortHash(sendReceipt.txid, 8, 6)}</span>
                     )}
-                    <button
-                      type="button"
-                      className="max-balance-btn"
-                      onClick={fillMax}
-                      disabled={spendableNative <= 0}
-                    >
-                      {t("portfolio.maxBalance", { defaultValue: "Max" })}:{" "}
-                      {amountUnit === "native"
-                        ? formatQty(spendableNative, selectedSymbol, discreet)
-                        : formatMoney(
-                            rate ? spendableNative * rate : maxFiat,
-                            fiat,
-                            discreet,
-                          )}
-                    </button>
-                  </div>
+                  </dd>
                 </div>
-                {utxo ? (
-                  <div className="field">
-                    <label>{t("portfolio.feePreset")}</label>
-                    <div className="segmented" role="radiogroup" aria-label={t("portfolio.feePreset")}>
-                      {(["economy", "normal", "priority"] as const).map((p) => (
-                        <button
-                          key={p}
-                          type="button"
-                          role="radio"
-                          aria-checked={feePreset === p}
-                          className={`segmented__item${feePreset === p ? " is-active" : ""}`}
-                          onClick={() => setFeePreset(p)}
-                        >
-                          {t(`portfolio.fee.${p}`)}
-                        </button>
-                      ))}
-                    </div>
-                    {feeEstimate?.feeSats != null ? (
-                      <p className="field-hint">
-                        {t("portfolio.feeEstimate", { sats: feeEstimate.feeSats })}
-                      </p>
-                    ) : null}
-                  </div>
-                ) : null}
-              </>
-            ) : null}
+              </dl>
 
-            {sendStep === "review" ? (
-              <>
-                <h3 style={{ margin: 0 }}>{t("portfolio.reviewTitle")}</h3>
-                <p className="section-desc">{t("portfolio.reviewHint")}</p>
-                <div className="review-grid">
-                  <span>{t("portfolio.to")}</span>
-                  <AddressEmphasis address={to.trim()} />
-                  <span>{t("portfolio.asset", { defaultValue: "Asset" })}</span>
-                  <strong>{selectedSymbol}</strong>
-                  <span>{t("portfolio.amount")}</span>
-                  <strong>
-                    {amountUnit === "fiat"
-                      ? `${amount} ${fiat} (≈ ${nativeAmount} ${selectedSymbol})`
-                      : `${amount} ${selectedSymbol}`}
-                  </strong>
-                  {utxo ? (
-                    <>
-                      <span>{t("portfolio.feePreset")}</span>
-                      <strong>{t(`portfolio.fee.${feePreset}`)}</strong>
-                    </>
-                  ) : null}
-                </div>
-              </>
-            ) : null}
-
-            <div className="row" style={{ marginTop: 8 }}>
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={
-                  busy ||
-                  !canSpend ||
-                  (sendStep === "to" && !addressValid) ||
-                  (sendStep === "amount" && !amountValid) ||
-                  (sendStep === "review" && (!addressValid || !amountValid))
-                }
-                onClick={() => sendGoNext()}
-              >
-                {sendStep === "review"
-                  ? busy && portfolio.kind === "trezor"
-                    ? t("portfolio.trezorConfirmHint", {
-                        defaultValue: "Confirm on your Trezor…",
-                      })
-                    : t("portfolio.confirmSend")
-                  : t("portfolio.sendContinue")}
-              </button>
-              {sendStep !== "to" ? (
+              <div className="send-done__actions">
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => goTab("history")}
+                >
+                  {t("portfolio.viewTransactions", {
+                    defaultValue: "View transactions",
+                  })}
+                </button>
                 <button
                   type="button"
                   className="btn btn-ghost"
-                  disabled={busy}
-                  onClick={sendGoBack}
+                  onClick={resetSendForm}
                 >
-                  {t("common.back")}
+                  {t("portfolio.sendAgain", { defaultValue: "Send again" })}
                 </button>
-              ) : null}
+              </div>
             </div>
-          </ProcedureShell>
+          ) : (
+            <ProcedureShell
+              ariaLabel={t("portfolio.send")}
+              direction={sendDir}
+              activeId={sendStep}
+              steps={[
+                { id: "to", label: t("portfolio.sendStepTo") },
+                { id: "amount", label: t("portfolio.sendStepAmount") },
+                { id: "review", label: t("portfolio.sendStepReview") },
+              ]}
+            >
+              {sendStep === "to" ? (
+                <>
+                  <p className="section-desc" style={{ marginTop: 0 }}>
+                    {t("portfolio.sendToHint")}
+                  </p>
+                  <div className="field">
+                    <label>{t("portfolio.to")}</label>
+                    <div
+                      className={`to-field${
+                        safety || (to.trim() && addressChecking) ? " has-foot" : ""
+                      }${
+                        to.trim() && safety && !safety.ok ? " is-invalid" : ""
+                      }`}
+                    >
+                      <input
+                        value={to}
+                        onChange={(e) => setTo(e.target.value)}
+                        disabled={!canSpend}
+                        placeholder={exampleAddressForChain(portfolio.chain)}
+                        spellCheck={false}
+                        autoComplete="off"
+                        autoFocus
+                        aria-invalid={to.trim() && safety ? !safety.ok : undefined}
+                      />
+                      {to.trim() && addressChecking && !safety ? (
+                        <p className="to-field__foot">{t("portfolio.sendAddressChecking")}</p>
+                      ) : null}
+                      {safety ? (
+                        <p
+                          className={`to-field__foot${
+                            !safety.ok
+                              ? " is-error"
+                              : safety.warnings.length > 0
+                                ? " is-warn"
+                                : " is-ok"
+                          }`}
+                        >
+                          {safety.ok && safety.warnings.length === 0 ? (
+                            <>
+                              <span className="to-field__icon" aria-hidden>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                                  <path
+                                    d="M5 12.5l4.5 4.5L19 7.5"
+                                    stroke="currentColor"
+                                    strokeWidth="2.6"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
+                                </svg>
+                              </span>
+                              {t("portfolio.sendAddressOk")}
+                            </>
+                          ) : (
+                            safety.warnings[0] ?? t("portfolio.sendAddressCheckFailed")
+                          )}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                  {addressBook.length > 0 ? (
+                    <Select
+                      label={t("portfolio.addressBook")}
+                      value=""
+                      placeholder={t("portfolio.pickContact")}
+                      onChange={(id) => {
+                        const entry = addressBook.find((x) => x.id === id);
+                        if (entry) setTo(entry.address);
+                      }}
+                      options={addressBook.map((e) => ({
+                        value: e.id,
+                        label: `${e.label} · ${e.address.slice(0, 10)}...`,
+                      }))}
+                    />
+                  ) : null}
+                </>
+              ) : null}
+
+              {sendStep === "amount" ? (
+                <>
+                  <p className="section-desc" style={{ marginTop: 0 }}>
+                    {t("portfolio.sendAmountHint")}
+                  </p>
+                  {hasTokens ? (
+                    <Select
+                      className="select--asset"
+                      label={t("portfolio.asset", { defaultValue: "Asset" })}
+                      value={token}
+                      onChange={(v) => {
+                        setToken(v);
+                        setSendMax(false);
+                        setAmount("");
+                      }}
+                      options={assetOptions}
+                    />
+                  ) : null}
+                  <div className="field">
+                    <div className="field-label-row">
+                      <label>{t("portfolio.amount")}</label>
+                      {rate ? (
+                        <div
+                          className="segmented segmented--2 segmented--sm"
+                          role="radiogroup"
+                          aria-label={t("portfolio.amountUnit", { defaultValue: "Amount unit" })}
+                        >
+                          {(["native", "fiat"] as const).map((u) => (
+                            <button
+                              key={u}
+                              type="button"
+                              role="radio"
+                              aria-checked={amountUnit === u}
+                              className={`segmented__item${amountUnit === u ? " is-active" : ""}`}
+                              onClick={() => {
+                                setAmountUnit(u);
+                                setSendMax(false);
+                                setAmount("");
+                              }}
+                            >
+                              {u === "native" ? selectedSymbol : fiat}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className={`amount-input-group${exceedsBalance ? " is-invalid" : ""}`}>
+                      <span className="amount-input-group__unit">
+                        {amountUnit === "native" ? selectedSymbol : fiat}
+                      </span>
+                      <input
+                        value={amount}
+                        inputMode="decimal"
+                        placeholder="0"
+                        onChange={(e) => onAmountChange(e.target.value)}
+                        autoFocus
+                        aria-invalid={exceedsBalance || undefined}
+                      />
+                    </div>
+                    <div className="field-hint-row">
+                      {exceedsBalance ? (
+                        <p className="field-hint field-hint--error">
+                          {t("portfolio.sendExceedsBalance")}
+                        </p>
+                      ) : fiatHelper ? (
+                        <p className="field-hint">{fiatHelper}</p>
+                      ) : (
+                        <span />
+                      )}
+                      <button
+                        type="button"
+                        className="max-balance-btn"
+                        onClick={fillMax}
+                        disabled={spendableNative <= 0}
+                      >
+                        {t("portfolio.maxBalance", { defaultValue: "Max" })}:{" "}
+                        {amountUnit === "native"
+                          ? formatQty(spendableNative, selectedSymbol, discreet)
+                          : formatMoney(
+                              rate ? spendableNative * rate : maxFiat,
+                              fiat,
+                              discreet,
+                            )}
+                      </button>
+                    </div>
+                  </div>
+                  {utxo ? (
+                    <div className="field">
+                      <label>{t("portfolio.feePreset")}</label>
+                      <div className="segmented" role="radiogroup" aria-label={t("portfolio.feePreset")}>
+                        {(["economy", "normal", "priority"] as const).map((p) => (
+                          <button
+                            key={p}
+                            type="button"
+                            role="radio"
+                            aria-checked={feePreset === p}
+                            className={`segmented__item${feePreset === p ? " is-active" : ""}`}
+                            onClick={() => setFeePreset(p)}
+                          >
+                            {t(`portfolio.fee.${p}`)}
+                          </button>
+                        ))}
+                      </div>
+                      {feeEstimate?.feeSats != null ? (
+                        <p className="field-hint">
+                          {t("portfolio.feeEstimate", { sats: feeEstimate.feeSats })}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
+
+              {sendStep === "review" ? (
+                <>
+                  <h3 className="send-confirm__title">
+                    {t("portfolio.reviewTitle", { defaultValue: "Are you sure?" })}
+                  </h3>
+                  <p className="section-desc">
+                    {t("portfolio.reviewHint", {
+                      defaultValue: "This can't be undone.",
+                    })}
+                  </p>
+                  <div className="review-grid">
+                    <span>{t("portfolio.to")}</span>
+                    <AddressEmphasis address={to.trim()} />
+                    <span>{t("portfolio.asset", { defaultValue: "Asset" })}</span>
+                    <strong>{selectedSymbol}</strong>
+                    <span>{t("portfolio.amount")}</span>
+                    <strong>
+                      {amountUnit === "fiat"
+                        ? `${formatCompactAmount(amount, 2)} ${fiat} ≈ ${formatCompactAmount(nativeAmount, 4)} ${selectedSymbol}`
+                        : `${formatCompactAmount(amount, 6)} ${selectedSymbol}`}
+                    </strong>
+                    {utxo ? (
+                      <>
+                        <span>{t("portfolio.feePreset")}</span>
+                        <strong>{t(`portfolio.fee.${feePreset}`)}</strong>
+                      </>
+                    ) : null}
+                  </div>
+                </>
+              ) : null}
+
+              <div className="row" style={{ marginTop: 8 }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={
+                    busy ||
+                    !canSpend ||
+                    (sendStep === "to" && !addressValid) ||
+                    (sendStep === "amount" && !amountValid) ||
+                    (sendStep === "review" && (!addressValid || !amountValid))
+                  }
+                  onClick={() => sendGoNext()}
+                >
+                  {sendStep === "review"
+                    ? busy
+                      ? portfolio.kind === "trezor"
+                        ? t("portfolio.trezorConfirmHint", {
+                            defaultValue: "Confirm on your Trezor…",
+                          })
+                        : t("portfolio.sending", { defaultValue: "Sending…" })
+                      : t("portfolio.confirmSend", { defaultValue: "Yes, send" })
+                    : t("portfolio.sendContinue")}
+                </button>
+                {sendStep !== "to" ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    disabled={busy}
+                    onClick={sendGoBack}
+                  >
+                    {t("common.back")}
+                  </button>
+                ) : null}
+              </div>
+            </ProcedureShell>
+          )}
         </div>
       ) : null}
 
@@ -1114,6 +1286,7 @@ export function PortfolioDetail({
           portfolio={portfolio}
           fiat={fiat}
           fiatPrices={fiatPrices}
+          activityMinFiat={status?.activity_min_fiat ?? 0.02}
           busy={busy}
           onBumpFee={(txid) => void bumpFee(txid)}
         />

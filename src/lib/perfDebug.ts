@@ -138,10 +138,3 @@ export function startPerfDebug() {
     void rustLog(`visibility ${document.visibilityState}`);
   });
 }
-
-export const perfApi = {
-  log: (message: string) => invoke<void>("perf_debug_log", { message }),
-  snapshot: () => invoke<PerfSnapshot>("perf_debug_snapshot"),
-  ping: () => invoke<number>("perf_ping"),
-  bench: (iters = 40) => invoke<PerfBenchResult>("perf_run_bench", { iters }),
-};

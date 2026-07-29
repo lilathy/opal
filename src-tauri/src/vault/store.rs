@@ -68,6 +68,10 @@ impl VaultService {
                 security_preset: s.security_preset,
                 start_with_windows: s.start_with_windows,
                 notifications_enabled: s.notifications_enabled,
+                activity_min_fiat: s.activity_min_fiat,
+                analytics_enabled: s.analytics_enabled,
+                analytics_tile_order: s.analytics_tile_order.clone(),
+                analytics_hidden_tiles: s.analytics_hidden_tiles.clone(),
             });
         }
 
@@ -90,6 +94,10 @@ impl VaultService {
                 security_preset: defaults.security_preset,
                 start_with_windows: defaults.start_with_windows,
                 notifications_enabled: defaults.notifications_enabled,
+                activity_min_fiat: defaults.activity_min_fiat,
+                analytics_enabled: defaults.analytics_enabled,
+                analytics_tile_order: defaults.analytics_tile_order.clone(),
+                analytics_hidden_tiles: defaults.analytics_hidden_tiles.clone(),
             });
         }
 
@@ -111,6 +119,10 @@ impl VaultService {
             security_preset: file.preset,
             start_with_windows: false,
             notifications_enabled: true,
+            activity_min_fiat: 0.02,
+            analytics_enabled: true,
+            analytics_tile_order: Vec::new(),
+            analytics_hidden_tiles: Vec::new(),
         })
     }
 

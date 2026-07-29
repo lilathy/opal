@@ -7,7 +7,7 @@ import {
   type RefObject,
 } from "react";
 
-const FLIP_MS = 320;
+const FLIP_MS = 280;
 const FLIP_EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
 
 type DragState = {

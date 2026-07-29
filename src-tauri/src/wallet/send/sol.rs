@@ -45,6 +45,8 @@ fn decode_pubkey_const(s: &str) -> [u8; 32] {
 }
 
 /// Builds and broadcasts a legacy Solana system transfer.
+/// When `send_max` is true, spends `balance - getFeeForMessage` so the fee
+/// payer can still pay (and ends at ~0 lamports).
 pub fn send_sol_native(
     http: &HttpCtx,
     sk_hex: &str,
@@ -52,19 +54,52 @@ pub fn send_sol_native(
     to: &str,
     amount_sol: &str,
     fee_preset: FeePreset,
+    send_max: bool,
 ) -> Result<String, OpalError> {
-    let lamports = parse_sol_to_lamports(amount_sol)?;
     let (signing, from_pk) = load_signer(sk_hex, from)?;
     let to_pk = decode_pubkey(to)?;
-
     let recent = fetch_recent_blockhash(http)?;
     let priority = matches!(fee_preset, FeePreset::Priority);
-    let compute_budget = compute_budget_program_id();
+    let url = sol_url(http);
 
-    // Account order (legacy header rules):
-    // signed writable → signed readonly → unsigned writable → unsigned readonly
-    // [from, to, system] (+ compute_budget when Priority)
-    let mut keys: Vec<[u8; 32]> = vec![from_pk, to_pk, SYSTEM_PROGRAM];
+    // Always size the transfer so amount + fee fits the live balance. This
+    // covers Max (send_max) and the common case of typing the full balance.
+    let bal = sol_get_balance_lamports(http, &url, &from_pk)?;
+    let requested = if send_max {
+        bal.saturating_sub(5_000).max(1)
+    } else {
+        parse_sol_to_lamports(amount_sol)?
+    };
+    let probe = requested.min(bal.saturating_sub(5_000).max(1));
+    let probe_msg = build_native_transfer_message(&from_pk, &to_pk, &recent, probe, priority);
+    let fee = sol_fee_for_message(http, &url, &probe_msg)?
+        .unwrap_or(5_000)
+        .saturating_add(if priority { 5_000 } else { 0 });
+    let max_send = bal.saturating_sub(fee);
+    if max_send == 0 {
+        return Err(OpalError::InvalidInput(
+            "insufficient SOL for amount plus network fee".into(),
+        ));
+    }
+    let lamports = if send_max || requested > max_send {
+        max_send
+    } else {
+        requested
+    };
+
+    let message = build_native_transfer_message(&from_pk, &to_pk, &recent, lamports, priority);
+    sign_and_broadcast(http, &signing, &message)
+}
+
+fn build_native_transfer_message(
+    from_pk: &[u8; 32],
+    to_pk: &[u8; 32],
+    recent: &[u8; 32],
+    lamports: u64,
+    priority: bool,
+) -> Vec<u8> {
+    let compute_budget = compute_budget_program_id();
+    let mut keys: Vec<[u8; 32]> = vec![*from_pk, *to_pk, SYSTEM_PROGRAM];
     if priority {
         keys.push(compute_budget);
     }
@@ -88,8 +123,7 @@ pub fn send_sol_native(
         },
     });
 
-    let message = encode_legacy_message(1, 0, num_readonly_unsigned, &keys, &recent, &ixs);
-    sign_and_broadcast(http, &signing, &message)
+    encode_legacy_message(1, 0, num_readonly_unsigned, &keys, recent, &ixs)
 }
 
 /// Build an unsigned native transfer message for hardware signing.
@@ -105,39 +139,8 @@ pub fn build_sol_native_message(
     let to_pk = decode_pubkey(to)?;
     let recent = fetch_recent_blockhash(http)?;
     let priority = matches!(fee_preset, FeePreset::Priority);
-    let compute_budget = compute_budget_program_id();
-
-    let mut keys: Vec<[u8; 32]> = vec![from_pk, to_pk, SYSTEM_PROGRAM];
-    if priority {
-        keys.push(compute_budget);
-    }
-    let num_readonly_unsigned = if priority { 2u8 } else { 1u8 };
-
-    let mut ixs: Vec<CompiledIx> = Vec::new();
-    if priority {
-        ixs.push(ix_set_compute_unit_price(
-            (keys.len() - 1) as u8,
-            PRIORITY_MICROLAMPORTS,
-        ));
-    }
-    ixs.push(CompiledIx {
-        program_id_index: 2,
-        accounts: vec![0, 1],
-        data: {
-            let mut d = Vec::with_capacity(12);
-            d.extend_from_slice(&2u32.to_le_bytes());
-            d.extend_from_slice(&lamports.to_le_bytes());
-            d
-        },
-    });
-
-    Ok(encode_legacy_message(
-        1,
-        0,
-        num_readonly_unsigned,
-        &keys,
-        &recent,
-        &ixs,
+    Ok(build_native_transfer_message(
+        &from_pk, &to_pk, &recent, lamports, priority,
     ))
 }
 
@@ -165,7 +168,7 @@ pub fn broadcast_sol_with_signature(
             "jsonrpc": "2.0",
             "id": 1,
             "method": "sendTransaction",
-            "params": [b64, {"encoding": "base64", "preflightCommitment": "finalized"}]
+            "params": [b64, {"encoding": "base64", "preflightCommitment": "confirmed", "maxRetries": 3}]
         }),
     )?;
     if let Some(err) = sent.get("error") {
@@ -276,6 +279,52 @@ fn sol_url(http: &HttpCtx) -> String {
     http.chain_rpc(ChainId::Sol)
 }
 
+/// Balance from the same RPC we broadcast on (avoids race vs multi-RPC scrape).
+fn sol_get_balance_lamports(
+    http: &HttpCtx,
+    url: &str,
+    pubkey: &[u8; 32],
+) -> Result<u64, OpalError> {
+    let address = bs58::encode(pubkey).into_string();
+    let v = http.post_json(
+        url,
+        &json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getBalance",
+            "params": [address, {"commitment": "confirmed"}]
+        }),
+    )?;
+    if let Some(err) = v.get("error") {
+        return Err(OpalError::Io(format!("sol getBalance: {err}")));
+    }
+    v["result"]["value"]
+        .as_u64()
+        .ok_or_else(|| OpalError::Io("sol getBalance: missing value".into()))
+}
+
+fn sol_fee_for_message(
+    http: &HttpCtx,
+    url: &str,
+    message: &[u8],
+) -> Result<Option<u64>, OpalError> {
+    let b64 = base64::engine::general_purpose::STANDARD.encode(message);
+    let v = http.post_json(
+        url,
+        &json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getFeeForMessage",
+            "params": [b64, {"commitment": "confirmed"}]
+        }),
+    )?;
+    if let Some(err) = v.get("error") {
+        return Err(OpalError::Io(format!("getFeeForMessage: {err}")));
+    }
+    // null when blockhash expired — caller falls back to 5000
+    Ok(v["result"]["value"].as_u64())
+}
+
 fn fetch_recent_blockhash(http: &HttpCtx) -> Result<[u8; 32], OpalError> {
     let url = sol_url(http);
     let bh = http.post_json(
@@ -284,7 +333,7 @@ fn fetch_recent_blockhash(http: &HttpCtx) -> Result<[u8; 32], OpalError> {
             "jsonrpc": "2.0",
             "id": 1,
             "method": "getLatestBlockhash",
-            "params": [{"commitment": "finalized"}]
+            "params": [{"commitment": "confirmed"}]
         }),
     )?;
     if let Some(err) = bh.get("error") {
@@ -340,7 +389,7 @@ fn sign_and_broadcast(
             "jsonrpc": "2.0",
             "id": 1,
             "method": "sendTransaction",
-            "params": [b64, {"encoding": "base64", "preflightCommitment": "finalized"}]
+            "params": [b64, {"encoding": "base64", "preflightCommitment": "confirmed", "maxRetries": 3}]
         }),
     )?;
     if let Some(err) = sent.get("error") {
@@ -548,6 +597,7 @@ fn push_compact_u16(buf: &mut Vec<u8>, mut val: u16) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ed25519_dalek::Verifier;
 
     #[test]
     fn usdc_ata_known_shape() {
@@ -562,5 +612,129 @@ mod tests {
     fn parse_sol_amount() {
         assert_eq!(parse_sol_to_lamports("1").unwrap(), 1_000_000_000);
         assert_eq!(parse_sol_to_lamports("0.5").unwrap(), 500_000_000);
+    }
+
+    #[test]
+    fn native_message_signature_verifies_locally() {
+        let sk = SigningKey::from_bytes(&[7u8; 32]);
+        let from = *sk.verifying_key().as_bytes();
+        let to = [9u8; 32];
+        let recent = [3u8; 32];
+        let message = build_native_transfer_message(&from, &to, &recent, 1_000, false);
+        let sig = sk.sign(&message);
+        sk.verifying_key()
+            .verify(&message, &sig)
+            .expect("dalek verify");
+
+        // Wire format: shortvec(1) || sig || message
+        let mut tx = Vec::new();
+        push_compact_u16(&mut tx, 1);
+        tx.extend_from_slice(&sig.to_bytes());
+        tx.extend_from_slice(&message);
+        assert_eq!(tx[0], 1);
+        assert_eq!(&tx[1..65], &sig.to_bytes());
+        assert_eq!(&tx[65..], &message);
+
+        // Header: 1 sig, 0 readonly signed, 1 readonly unsigned, 3 keys
+        assert_eq!(message[0], 1);
+        assert_eq!(message[1], 0);
+        assert_eq!(message[2], 1);
+        assert_eq!(message[3], 3); // compact-u16 for 3 keys
+        assert_eq!(&message[4..36], &from);
+    }
+
+    #[test]
+    fn dalek_matches_nacl_vector() {
+        let sk = SigningKey::from_bytes(&[7u8; 32]);
+        let msg = b"hello solana message bytes";
+        let sig = sk.sign(msg);
+        assert_eq!(
+            hex::encode(sk.verifying_key().as_bytes()),
+            "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c"
+        );
+        assert_eq!(
+            hex::encode(sig.to_bytes()),
+            "d004bd54d2df5fc8a452881f9992c90cc05ca7ac6c7ab57d9364cbc22f1730951f7713b529e126af88d8282c6fcd6758f8bf41b32b9de56ba5e05ea7402a9e0e"
+        );
+    }
+
+    #[test]
+    fn signed_tx_accepted_by_publicnode_sigverify() {
+        // Live RPC: a correctly signed (unfunded) transfer must fail on fee payer
+        // balance — NOT signature verification. Regresses wire format + dalek signing.
+        use std::collections::HashMap;
+        let http = match HttpCtx::new(None, HashMap::new()) {
+            Ok(h) => h,
+            Err(e) => {
+                eprintln!("skip network test: {e}");
+                return;
+            }
+        };
+        let sk = SigningKey::from_bytes(&[7u8; 32]);
+        let from = *sk.verifying_key().as_bytes();
+        let to = [9u8; 32];
+        let recent = match fetch_recent_blockhash(&http) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("skip network test: {e}");
+                return;
+            }
+        };
+        let message = build_native_transfer_message(&from, &to, &recent, 1_000, false);
+        let err = match sign_and_broadcast(&http, &sk, &message) {
+            Ok(sig) => panic!("expected simulation failure, got sig {sig}"),
+            Err(e) => e.to_string(),
+        };
+        assert!(
+            !err.to_lowercase().contains("signature verification"),
+            "sigverify failed — wire format or signing bug: {err}"
+        );
+        assert!(
+            err.contains("fee")
+                || err.contains("Account")
+                || err.contains("insufficient")
+                || err.contains("simulate")
+                || err.contains("rpc error"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn exodus_and_slip10_send_pass_sigverify() {
+        use crate::wallet::hd::{derive_sol_exodus, derive_sol_slip10};
+        use std::collections::HashMap;
+        let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+        let http = match HttpCtx::new(None, HashMap::new()) {
+            Ok(h) => h,
+            Err(e) => {
+                eprintln!("skip network test: {e}");
+                return;
+            }
+        };
+        let to = "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM";
+        for (label, derived) in [
+            ("exodus", derive_sol_exodus(mnemonic, "", 0, true).unwrap()),
+            ("slip10", derive_sol_slip10(mnemonic, "", 0, true).unwrap()),
+        ] {
+            let sk = derived.private_key_hex.clone().unwrap();
+            let from = derived.address.clone();
+            let err = match send_sol_native(
+                &http,
+                &sk,
+                &from,
+                to,
+                "0.000001",
+                FeePreset::Normal,
+                false,
+            ) {
+                Ok(s) => panic!("{label}: unexpected ok {s}"),
+                Err(e) => e.to_string(),
+            };
+            eprintln!("{label} ({from}): {err}");
+            assert!(
+                !err.to_lowercase().contains("signature verification"),
+                "{label} sigverify failed: {err}"
+            );
+        }
     }
 }

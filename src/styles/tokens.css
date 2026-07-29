@@ -19,12 +19,35 @@
   --focus-ring: rgba(245, 245, 244, 0.55);
   --radius: 12px;
   --radius-sm: 8px;
-  --font-sans: "Plus Jakarta Sans", "Segoe UI", sans-serif;
-  --font-num: "Manrope", "Plus Jakarta Sans", "Segoe UI", sans-serif;
-  --font-mono: "JetBrains Mono", "Consolas", monospace;
+
+  /*
+   * Typography — exactly four styles, one family:
+   *   Text:   500 (body) / 700 (emphasis)
+   *   Numbers: 500 (secondary) / 700 (primary balances)
+   */
+  --font-ui: "Plus Jakarta Sans", sans-serif;
+  --weight-text: 500;
+  --weight-text-strong: 700;
+  --weight-num: 500;
+  --weight-num-strong: 700;
+
   --sidebar-width: 280px;
-  --ease: 240ms ease;
-  --ease-fade: 280ms cubic-bezier(0.22, 1, 0.36, 1);
+
+  /*
+   * Motion — three jobs only:
+   *   Enter   — fade-up (--dur)
+   *   Step    — horizontal slide (--dur-step)
+   *   Press   — soft scale (--dur)
+   * Color/border hovers use --dur-fast.
+   */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 160ms;
+  --dur: 280ms;
+  --dur-step: 260ms;
+  /* Back-compat aliases used across global.css */
+  --ease: var(--dur-fast) ease;
+  --ease-fade: var(--dur) var(--ease-out);
+
   color-scheme: dark;
 }
 
@@ -43,8 +66,11 @@ body,
 }
 
 body {
-  font-family: var(--font-sans);
+  font-family: var(--font-ui);
   font-size: 14px;
+  font-weight: var(--weight-text);
+  font-variant-numeric: normal;
+  font-feature-settings: normal;
   line-height: 1.45;
   color: var(--text);
   background: var(--bg);
@@ -52,6 +78,36 @@ body {
   -webkit-tap-highlight-color: transparent;
   user-select: none;
   -webkit-user-select: none;
+}
+
+/* Text styles */
+.type-text {
+  font-family: var(--font-ui);
+  font-weight: var(--weight-text);
+  font-variant-numeric: normal;
+  font-feature-settings: normal;
+}
+
+.type-text-strong {
+  font-family: var(--font-ui);
+  font-weight: var(--weight-text-strong);
+  font-variant-numeric: normal;
+  font-feature-settings: normal;
+}
+
+/* Number styles — same face; weight is the only difference */
+.type-num {
+  font-family: var(--font-ui);
+  font-weight: var(--weight-num);
+  font-variant-numeric: normal;
+  font-feature-settings: normal;
+}
+
+.type-num-strong {
+  font-family: var(--font-ui);
+  font-weight: var(--weight-num-strong);
+  font-variant-numeric: normal;
+  font-feature-settings: normal;
 }
 
 input,

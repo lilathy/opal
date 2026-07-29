@@ -2,16 +2,16 @@
 
 ## Reporting a vulnerability
 
-Do **not** open a public GitHub issue for security vulnerabilities.
+Do **not** open a public GitHub issue for security bugs.
 
-Email or privately message the maintainers with:
+Contact the maintainers privately with:
 
-- A clear description of the issue
+- A clear description
 - Steps to reproduce
-- Impact assessment (e.g. vault ciphertext offline attack, key material exposure, RCE)
-- Your preferred contact for follow-up
+- Impact (vault offline attack, key material exposure, RCE, etc.)
+- How you prefer to be reached
 
-We will acknowledge receipt as soon as practical and work on a fix before any public disclosure.
+We will acknowledge as soon as practical and aim to fix before any public write-up.
 
 ## Cryptography (vault)
 
@@ -19,7 +19,7 @@ We will acknowledge receipt as soon as practical and work on a fix before any pu
 |-------|--------|
 | KDF | Argon2id |
 | AEAD | AES-256-GCM |
-| Structure | Envelope encryption (password → KEK wraps random 256-bit vault master key) |
+| Structure | Envelope encryption (password → KEK wraps a random 256-bit master key) |
 
 ### Argon2id presets
 
@@ -29,18 +29,19 @@ We will acknowledge receipt as soon as practical and work on a fix before any pu
 | Normal (default) | 65_536 (64 MiB) | 3 | 1 |
 | Paranoid | 262_144 (256 MiB) | 4 | 1 |
 
-Parameters are stored alongside the salt in the vault file so unlock always matches creation.
+Parameters are stored with the salt so unlock always matches creation.
 
-### Threat notes
+## Practices
 
-- The vault password is the only unlock factor in v1.
-- There is no password recovery; seed restore is the recovery path for software keys (once seeded).
-- Optional wipe-after-10 consecutive failures destroys local vault data only.
+- The vault password is the only unlock factor in current builds.
+- There is no password recovery; software recovery is seed restore into a new vault.
+- Optional wipe-after-10 destroys local vault data only.
 - Trezor private keys never enter Opal.
-- Do not paste seed phrases into chat, issues, or logs.
+- Do not paste seed phrases, private keys, or API secrets into issues, chat, or logs.
+- Keep FixedFloat credentials and updater signing keys out of git (use gitignored local files / CI secrets).
 
 ## Scope
 
-In scope: vault crypto, key handling in memory, Tauri command surface, dependency RCE in the desktop app.
+**In scope:** vault crypto, key handling in memory, Tauri command surface, dependency RCE in the desktop app.
 
-Out of scope (for now): third-party RPC/node honesty, physical access with unlocked session, phishing of the user.
+**Out of scope for now:** third-party RPC honesty, physical access with an unlocked session, user phishing.

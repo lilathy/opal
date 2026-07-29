@@ -23,6 +23,10 @@ export interface VaultStatus {
   security_preset: SecurityPreset;
   start_with_windows: boolean;
   notifications_enabled: boolean;
+  activity_min_fiat: number;
+  analytics_enabled: boolean;
+  analytics_tile_order: string[];
+  analytics_hidden_tiles: string[];
 }
 
 export interface AppSettings {
@@ -37,6 +41,11 @@ export interface AppSettings {
   auto_lock_minutes: number;
   start_with_windows: boolean;
   notifications_enabled: boolean;
+  /** Hide activity below this notional in the display fiat. */
+  activity_min_fiat: number;
+  analytics_enabled: boolean;
+  analytics_tile_order: string[];
+  analytics_hidden_tiles: string[];
   custom_rpc: Record<string, string>;
   fixedfloat_api_key?: string | null;
   fixedfloat_api_secret?: string | null;
@@ -355,6 +364,8 @@ export const api = {
     timedInvoke<void>("vault_export", { request: { password, destPath } }),
   vaultImport: (password: string, srcPath: string) =>
     timedInvoke<VaultStatus>("vault_import", { request: { password, srcPath } }),
+  writeTextFile: (destPath: string, contents: string) =>
+    timedInvoke<void>("write_text_file", { request: { destPath, contents } }),
   setAutostart: (enabled: boolean) => timedInvoke<void>("set_autostart", { enabled }),
   appInfo: () => timedInvoke<AppInfo>("app_info"),
 

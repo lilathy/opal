@@ -288,7 +288,7 @@ export function CreateVaultScreen() {
       <div className="auth-wizard">
         <div
           key={step}
-          className={`auth-wizard-pane${direction === "forward" ? " auth-wizard-pane--fwd" : " auth-wizard-pane--back"}`}
+          className={`wizard-pane${direction === "forward" ? " wizard-pane--fwd" : " wizard-pane--back"}`}
         >
         <header className="settings-hero auth-wizard__hero">
           <p className="auth-wizard__progress">

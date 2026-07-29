@@ -209,7 +209,9 @@ export function SwapPick({
                     <span className="swap-pick__row-copy">
                       <span className="swap-pick__row-title">{g.portfolioName}</span>
                       {only.detail ? (
-                        <span className="swap-pick__row-detail">{only.detail}</span>
+                        <span className="swap-pick__row-detail swap-pick__row-detail--bal">
+                          {only.detail}
+                        </span>
                       ) : (
                         <span className="swap-pick__row-detail">{only.symbol}</span>
                       )}
@@ -262,7 +264,9 @@ export function SwapPick({
                             <span className="swap-pick__row-copy">
                               <span className="swap-pick__row-title">{a.symbol}</span>
                               {a.detail ? (
-                                <span className="swap-pick__row-detail">{a.detail}</span>
+                                <span className="swap-pick__row-detail swap-pick__row-detail--bal">
+                                  {a.detail}
+                                </span>
                               ) : null}
                             </span>
                           </button>

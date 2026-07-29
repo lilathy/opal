@@ -6,6 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { playErrorSound, playIncomingSound } from "../lib/sounds";
 
 export type NotificationKind = "incoming" | "error" | "success" | "warning";
 
@@ -89,6 +90,11 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       const duration = item.duration ?? DEFAULT_DURATIONS[item.kind];
       const entry: NotificationItem = { ...item, id, duration };
       setItems((prev) => [entry, ...prev].slice(0, MAX_STACK));
+      if (item.kind === "incoming") {
+        playIncomingSound();
+      } else if (item.kind === "error") {
+        playErrorSound();
+      }
       if (duration > 0) {
         const tid = window.setTimeout(() => dismiss(id), duration);
         autoTimers.current.set(id, tid);

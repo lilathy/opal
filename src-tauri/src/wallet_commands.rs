@@ -1256,14 +1256,18 @@ pub async fn portfolio_rescan(
 
         let mut session = state.session.lock();
         let unlocked = session.as_mut().ok_or_else(|| map_err(OpalError::Locked))?;
-        if let Ok(json) = serde_json::to_string(&bals) {
-            if let Some(p) = unlocked
-                .payload
-                .portfolios
-                .iter_mut()
-                .find(|p| p.id == portfolio_id)
-            {
-                p.cached_balances_json = Some(json);
+        // Cache stores a single PortfolioBalance object (not the Vec wrapper).
+        if let Some(row) = bals.iter().find(|b| b.portfolio_id == portfolio_id).or_else(|| bals.first())
+        {
+            if let Ok(json) = serde_json::to_string(row) {
+                if let Some(p) = unlocked
+                    .payload
+                    .portfolios
+                    .iter_mut()
+                    .find(|p| p.id == portfolio_id)
+                {
+                    p.cached_balances_json = Some(json);
+                }
             }
         }
         state.vault.persist(unlocked).map_err(map_err)?;

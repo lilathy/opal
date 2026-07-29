@@ -1,4 +1,3 @@
-import { useTranslation } from "react-i18next";
 import type { CSSProperties } from "react";
 import { AssetIcon } from "./CryptoIcons";
 import type { NotificationItem, NotificationKind } from "../state/notifications";
@@ -62,7 +61,6 @@ function NotificationCard({
   n: NotificationItem;
   onDismiss: (id: string) => void;
 }) {
-  const { t } = useTranslation();
   const style =
     n.duration > 0
       ? ({ "--notification-duration": `${n.duration}ms` } as CSSProperties)
@@ -110,22 +108,6 @@ function NotificationCard({
           {n.fiatAmount ? <span className="notification__fiat">{n.fiatAmount}</span> : null}
         </div>
       ) : null}
-
-      <button
-        type="button"
-        className="notification__close"
-        aria-label={t("notifications.dismiss", { defaultValue: "Dismiss" })}
-        onClick={() => onDismiss(n.id)}
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
-          <path
-            d="M7 7l10 10M17 7L7 17"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-          />
-        </svg>
-      </button>
 
       {n.duration > 0 ? (
         <div className="notification__timer" aria-hidden>

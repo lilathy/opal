@@ -18,10 +18,21 @@ src-tauri/target
 !.env.example
 fixedfloat.local.json
 *.local.json
+*.opal
+*.backup
+vault.*
 
 # Updater signing keys (private key must never be committed)
 *.key
 !*.key.pub
+
+# Scratch / personal notes
+todo.txt
+*.pem
+*.p12
+id_rsa*
+mnemonic*.txt
+seed*.txt
 
 # Editor directories and files
 .vscode/*

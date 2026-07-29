@@ -57,6 +57,14 @@ fn default_language() -> String {
     "en".into()
 }
 
+fn default_activity_min_fiat() -> f64 {
+    0.02
+}
+
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSettings {
     pub language: String,
@@ -69,6 +77,18 @@ pub struct AppSettings {
     pub auto_lock_minutes: u32,
     pub start_with_windows: bool,
     pub notifications_enabled: bool,
+    /// Hide activity / history rows below this fiat notional (display currency).
+    #[serde(default = "default_activity_min_fiat")]
+    pub activity_min_fiat: f64,
+    /// Show the Overview analytics tile grid.
+    #[serde(default = "default_true")]
+    pub analytics_enabled: bool,
+    /// Ordered visible analytics tile ids. Empty → app default order.
+    #[serde(default)]
+    pub analytics_tile_order: Vec<String>,
+    /// Soft-hidden analytics tile ids (can be restored later).
+    #[serde(default)]
+    pub analytics_hidden_tiles: Vec<String>,
     /// Optional BIP39 passphrase (only used when bip39_passphrase_enabled).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bip39_passphrase: Option<String>,
@@ -95,6 +115,10 @@ impl Default for AppSettings {
             auto_lock_minutes: 5,
             start_with_windows: false,
             notifications_enabled: true,
+            activity_min_fiat: default_activity_min_fiat(),
+            analytics_enabled: true,
+            analytics_tile_order: Vec::new(),
+            analytics_hidden_tiles: Vec::new(),
             bip39_passphrase: None,
             custom_rpc: HashMap::new(),
             fixedfloat_api_key: None,
@@ -198,4 +222,8 @@ pub struct VaultStatus {
     pub security_preset: SecurityPreset,
     pub start_with_windows: bool,
     pub notifications_enabled: bool,
+    pub activity_min_fiat: f64,
+    pub analytics_enabled: bool,
+    pub analytics_tile_order: Vec<String>,
+    pub analytics_hidden_tiles: Vec<String>,
 }

@@ -170,10 +170,10 @@ fn fetch_one_portfolio_balance_amounts(
                 ("USDT", token_contract(chain, "USDT")),
                 ("DAI", token_contract(chain, "DAI")),
             ];
-            let (wei, token_raws) = thread::scope(|scope| {
+            let (wei_res, token_raws) = thread::scope(|scope| {
                 let addr_native = address.as_str();
                 let native_h =
-                    scope.spawn(move || http.evm_balance_wei(chain, addr_native).unwrap_or(0));
+                    scope.spawn(move || http.evm_balance_wei(chain, addr_native));
                 let mut token_hs = Vec::new();
                 for (sym, contract) in tokens {
                     let addr_tok = address.as_str();
@@ -187,13 +187,18 @@ fn fetch_one_portfolio_balance_amounts(
                         (sym, raw)
                     }));
                 }
-                let wei = native_h.join().unwrap_or(0);
+                let wei = native_h
+                    .join()
+                    .unwrap_or(Err(OpalError::Io("evm join".into())));
                 let token_raws: Vec<(&str, u128)> = token_hs
                     .into_iter()
                     .filter_map(|h| h.join().ok())
                     .collect();
                 (wei, token_raws)
             });
+            let Ok(wei) = wei_res else {
+                return None;
+            };
             let native = wei as f64 / 1e18;
             let symbol = chain.native_symbol();
             assets.push(AssetBalance {
@@ -224,7 +229,10 @@ fn fetch_one_portfolio_balance_amounts(
             }
         }
         ChainId::Btc => {
-            let sats = http.btc_address_balance(chain, &address).unwrap_or(0);
+            let sats = match http.btc_address_balance(chain, &address) {
+                Ok(v) => v,
+                Err(_) => return None,
+            };
             let btc = sats as f64 / 1e8;
             assets.push(AssetBalance {
                 symbol: "BTC".into(),
@@ -235,7 +243,10 @@ fn fetch_one_portfolio_balance_amounts(
             keys.push(Some("bitcoin"));
         }
         ChainId::Ltc => {
-            let sats = http.btc_address_balance(chain, &address).unwrap_or(0);
+            let sats = match http.btc_address_balance(chain, &address) {
+                Ok(v) => v,
+                Err(_) => return None,
+            };
             let amt = sats as f64 / 1e8;
             assets.push(AssetBalance {
                 symbol: "LTC".into(),
@@ -246,7 +257,10 @@ fn fetch_one_portfolio_balance_amounts(
             keys.push(Some("litecoin"));
         }
         ChainId::Doge => {
-            let sats = http.btc_address_balance(chain, &address).unwrap_or(0);
+            let sats = match http.btc_address_balance(chain, &address) {
+                Ok(v) => v,
+                Err(_) => return None,
+            };
             let amt = sats as f64 / 1e8;
             assets.push(AssetBalance {
                 symbol: "DOGE".into(),
@@ -258,16 +272,21 @@ fn fetch_one_portfolio_balance_amounts(
         }
         ChainId::Sol => {
             // Native + tokens in parallel — sequential used to stack ~2.5s waits.
-            let (lamports, token_accounts) = thread::scope(|scope| {
+            // Native RPC failure → omit this portfolio so the UI keeps the last
+            // good balance instead of flashing to 0.
+            let (native_res, token_accounts) = thread::scope(|scope| {
                 let addr = address.as_str();
-                let native_h = scope.spawn(move || http.sol_balance_lamports(addr).unwrap_or(0));
+                let native_h = scope.spawn(move || http.sol_balance_lamports(addr));
                 let tokens_h =
                     scope.spawn(move || http.sol_all_token_balances(addr).unwrap_or_default());
                 (
-                    native_h.join().unwrap_or(0),
+                    native_h.join().unwrap_or(Err(OpalError::Io("sol join".into()))),
                     tokens_h.join().unwrap_or_default(),
                 )
             });
+            let Ok(lamports) = native_res else {
+                return None;
+            };
             let sol = lamports as f64 / 1e9;
             assets.push(AssetBalance {
                 symbol: "SOL".into(),
@@ -344,9 +363,8 @@ fn fetch_one_portfolio_balance_amounts(
         }
         ChainId::Xmr => {
             let (spend, view) = xmr_keys_for_payload(payload, portfolio);
-            // Hard-cap Monero sync — a stalled wallet-rpc used to block the
-            // whole balance command for minutes even with parallel scrapes
-            // (scope still waits on every join).
+            // Hard-cap Monero sync. On timeout / missing view key, omit this
+            // portfolio so the UI keeps the last good balance (never flash 0).
             let amount_str = match (&view, spend.as_deref()) {
                 (Some(view_key), spend_key) => {
                     let (tx, rx) = std::sync::mpsc::channel();
@@ -361,14 +379,15 @@ fn fetch_one_portfolio_balance_amounts(
                             &view_key,
                             &address,
                             "",
-                        )
-                        .unwrap_or_else(|_| "0".into());
+                        );
                         let _ = tx.send(v);
                     });
-                    rx.recv_timeout(std::time::Duration::from_millis(2_000))
-                        .unwrap_or_else(|_| "0".into())
+                    match rx.recv_timeout(std::time::Duration::from_millis(2_500)) {
+                        Ok(Ok(v)) => v,
+                        _ => return None,
+                    }
                 }
-                (None, _) => "0".into(),
+                (None, _) => return None,
             };
             let xmr: f64 = amount_str.parse().unwrap_or(0.0);
             assets.push(AssetBalance {
@@ -576,7 +595,16 @@ pub fn send_from_portfolio_opts(
     let chain = ChainId::parse(&portfolio.chain)?;
 
     if portfolio.kind == PortfolioKind::Trezor {
-        let txid = send_trezor_portfolio(http, portfolio, chain, to, amount, token)?;
+        let txid = send_trezor_portfolio(
+            http,
+            portfolio,
+            chain,
+            to,
+            amount,
+            token,
+            utxo_opts,
+            sol_fee,
+        )?;
         return Ok(SendResult {
             explorer_url: explorer_tx_url(chain, &txid),
             txid,
@@ -634,7 +662,15 @@ pub fn send_from_portfolio_opts(
             if let Some(sym) = token.filter(|s| !s.eq_ignore_ascii_case(native)) {
                 send_evm_token(http, chain, &sk_hex, &derived.address, to, amount, sym)?
             } else {
-                send_evm_native(http, chain, &sk_hex, &derived.address, to, amount)?
+                send_evm_native(
+                    http,
+                    chain,
+                    &sk_hex,
+                    &derived.address,
+                    to,
+                    amount,
+                    utxo_opts.send_max,
+                )?
             }
         }
         ChainId::Btc | ChainId::Ltc | ChainId::Doge => send_btc_like(
@@ -653,7 +689,15 @@ pub fn send_from_portfolio_opts(
             if let Some(sym) = token.filter(|s| !s.eq_ignore_ascii_case("SOL")) {
                 send_sol_token(http, &sk_hex, &derived.address, to, amount, sym)?
             } else {
-                send_sol_native(http, &sk_hex, &derived.address, to, amount, sol_fee)?
+                send_sol_native(
+                    http,
+                    &sk_hex,
+                    &derived.address,
+                    to,
+                    amount,
+                    sol_fee,
+                    utxo_opts.send_max,
+                )?
             }
         }
         ChainId::Trx => {
@@ -696,7 +740,10 @@ fn send_trezor_portfolio(
     to: &str,
     amount: &str,
     token: Option<&str>,
+    utxo_opts: &crate::wallet::send::UtxoSendOptions,
+    sol_fee: FeePreset,
 ) -> Result<String, OpalError> {
+    use crate::network::tron_address_to_hex;
     use crate::trezor::{
         trezor_sign_ethereum_tx, trezor_sign_solana_tx, trezor_sign_tron_tx, EthereumTxParams,
         TronSignParams, TronTransferParams,
@@ -705,6 +752,11 @@ fn send_trezor_portfolio(
         broadcast_sol_with_signature, broadcast_trx_with_signature, build_sol_native_message,
         create_trx_native_unsigned, send_btc_like_trezor,
     };
+
+    fn tron_addr_bytes(address: &str) -> Result<Vec<u8>, OpalError> {
+        let hex = tron_address_to_hex(address)?;
+        hex::decode(hex).map_err(|e| OpalError::InvalidInput(format!("tron address bytes: {e}")))
+    }
 
     let native = chain.native_symbol();
     let from = portfolio
@@ -798,7 +850,7 @@ fn send_trezor_portfolio(
                 to,
                 amount,
                 address_type,
-                &crate::wallet::send::UtxoSendOptions::default(),
+                utxo_opts,
             )
         }
         ChainId::Sol => {
@@ -808,7 +860,7 @@ fn send_trezor_portfolio(
                 ));
             }
             let path = format!("m/44'/501'/{}'/0'", portfolio.account_index);
-            let message = build_sol_native_message(http, from, to, amount, FeePreset::Normal)?;
+            let message = build_sol_native_message(http, from, to, amount, sol_fee)?;
             // Trezor SolanaSignTx expects the full serialized tx in some firmwares,
             // and the message in others — Suite sends the message bytes as serialized_tx.
             let sig = trezor_sign_solana_tx(&path, &message)?;
@@ -848,8 +900,8 @@ fn send_trezor_portfolio(
                 fee_limit: None,
                 data: None,
                 transfer: Some(TronTransferParams {
-                    owner_address: from.as_bytes().to_vec(),
-                    to_address: to.as_bytes().to_vec(),
+                    owner_address: tron_addr_bytes(from)?,
+                    to_address: tron_addr_bytes(to)?,
                     amount_sun: sun,
                 }),
                 trigger: None,

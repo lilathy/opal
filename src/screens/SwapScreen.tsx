@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AssetIcon } from "../components/CryptoIcons";
 import { SwapPick, type SwapPickGroup } from "../components/SwapPick";
+import { AssetIcon } from "../components/CryptoIcons";
 import {
   api,
   parseInvokeError,
@@ -10,8 +10,10 @@ import {
   type PortfolioRecord,
   type SwapQuote,
 } from "../lib/api";
-import { formatAmount, formatMoney } from "../lib/format";
-import { assetsOf } from "../lib/balances";
+import { formatAmount, formatCompactAmount, formatMoney } from "../lib/format";
+import { assetFiatValue, assetsOf } from "../lib/balances";
+import { useFiatPrices } from "../hooks/useFiatPrices";
+import { playSwapSound } from "../lib/sounds";
 import { useNotify } from "../state/notifications";
 
 function fiatSign(currency: string): string {
@@ -33,6 +35,8 @@ interface Props {
   fiat: string;
   discreet: boolean;
   onAddPortfolio: () => void;
+  /** Called after a swap moves funds so Overview balances/charts can catch up. */
+  onFundsMoved?: (portfolioIds: string[]) => void;
 }
 
 /** Assets Opal can execute a swap for directly, signed in-app (Solana via
@@ -83,8 +87,7 @@ function assetName(symbol: string): string {
 
 function formatPresetAmount(n: number): string {
   if (!Number.isFinite(n) || n <= 0) return "";
-  if (n >= 1) return n.toFixed(6).replace(/0+$/, "").replace(/\.$/, "");
-  return n.toFixed(8).replace(/0+$/, "").replace(/\.$/, "");
+  return formatCompactAmount(n);
 }
 
 /** Tokens you can receive into a portfolio on this chain. */
@@ -101,7 +104,14 @@ function receiveAssetsForChain(chain: string): string[] {
   return [];
 }
 
-export function SwapScreen({ portfolios, balances, fiat, discreet, onAddPortfolio }: Props) {
+export function SwapScreen({
+  portfolios,
+  balances,
+  fiat,
+  discreet,
+  onAddPortfolio,
+  onFundsMoved,
+}: Props) {
   const { t } = useTranslation();
   const { notify } = useNotify();
 
@@ -133,6 +143,19 @@ export function SwapScreen({ portfolios, balances, fiat, discreet, onAddPortfoli
     return list.sort((a, b) => (b.usd ?? 0) - (a.usd ?? 0));
   }, [portfolios, balances]);
 
+  const [fromKey, setFromKey] = useState<string | null>(null);
+  const [toKey, setToKey] = useState<string | null>(null);
+  const [amount, setAmount] = useState("");
+  const [amountUnit, setAmountUnit] = useState<"native" | "fiat">("native");
+  const [quote, setQuote] = useState<SwapQuote | null>(null);
+  const [pairMin, setPairMin] = useState<string | null>(null);
+  const [quoting, setQuoting] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [ffOrder, setFfOrder] = useState<FixedFloatOrder | null>(null);
+  const [ffReady, setFfReady] = useState(false);
+
+  const fiatPrices = useFiatPrices(fiat);
+
   const fromGroups = useMemo<SwapPickGroup[]>(() => {
     const byId = new Map<string, SwapPickGroup>();
     for (const h of holdings) {
@@ -146,24 +169,25 @@ export function SwapScreen({ portfolios, balances, fiat, discreet, onAddPortfoli
         };
         byId.set(h.portfolioId, g);
       }
+      const detail =
+        amountUnit === "fiat"
+          ? formatMoney(
+              assetFiatValue(
+                { symbol: h.symbol, amount: h.amount, decimals: 0, usd: h.usd },
+                fiat,
+                fiatPrices,
+              ),
+              fiat,
+              discreet,
+            )
+          : formatAmount(h.amount, discreet, 8);
       g.assets.push({
         symbol: h.symbol,
-        detail: formatAmount(h.amount, discreet, 8),
+        detail,
       });
     }
     return [...byId.values()];
-  }, [holdings, discreet]);
-
-  const [fromKey, setFromKey] = useState<string | null>(null);
-  const [toKey, setToKey] = useState<string | null>(null);
-  const [amount, setAmount] = useState("");
-  const [amountUnit, setAmountUnit] = useState<"native" | "fiat">("native");
-  const [quote, setQuote] = useState<SwapQuote | null>(null);
-  const [pairMin, setPairMin] = useState<string | null>(null);
-  const [quoting, setQuoting] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [ffOrder, setFfOrder] = useState<FixedFloatOrder | null>(null);
-  const [ffReady, setFfReady] = useState(false);
+  }, [holdings, discreet, amountUnit, fiat, fiatPrices]);
 
   useEffect(() => {
     if (fromGroups.length === 0) {
@@ -328,6 +352,7 @@ export function SwapScreen({ portfolios, balances, fiat, discreet, onAddPortfoli
     const rate = unitRate(from);
     if (!rate) return "";
     return formatPresetAmount(n / rate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [amount, amountUnit, from]);
 
   // Live quotes from FixedFloat (XML/API) or Jupiter as the amount changes.
@@ -380,11 +405,13 @@ export function SwapScreen({ portfolios, balances, fiat, discreet, onAddPortfoli
     setBusy(true);
     try {
       await api.swapJupiterTx(quote.raw, address);
+      playSwapSound();
       notify({
         kind: "success",
         title: t("notifications.successTitle"),
         message: t("swap.txReady"),
       });
+      onFundsMoved?.(from ? [from.portfolioId] : []);
     } catch (e) {
       showError(parseInvokeError(e).message);
     } finally {
@@ -410,6 +437,7 @@ export function SwapScreen({ portfolios, balances, fiat, discreet, onAddPortfoli
       setFfOrder(result.order);
       setAmount("");
       setQuote(null);
+      playSwapSound();
       notify({
         kind: "success",
         title: t("notifications.successTitle"),
@@ -418,6 +446,7 @@ export function SwapScreen({ portfolios, balances, fiat, discreet, onAddPortfoli
           txid: result.txid.slice(0, 10),
         }),
       });
+      onFundsMoved?.([from.portfolioId, toPortfolio.id].filter(Boolean));
     } catch (e) {
       const msg = parseInvokeError(e).message;
       if (/api key|api secret/i.test(msg)) {
@@ -505,7 +534,11 @@ export function SwapScreen({ portfolios, balances, fiat, discreet, onAddPortfoli
     if (busy) return t("swap.swapping");
     if (!hasAmount) return t("swap.enterAmount");
     if (overBalance) return t("swap.overBalance");
-    if (belowMin && pairMin) return t("swap.belowMin", { amount: pairMin, asset: from?.symbol ?? "" });
+    if (belowMin && pairMin)
+      return t("swap.belowMin", {
+        amount: formatCompactAmount(pairMin),
+        asset: from?.symbol ?? "",
+      });
     if (quoting && !quote) return t("common.loading");
     if (provider === "jupiter") return t("swap.swapNow");
     if (ffReady) return t("swap.swapNow");
@@ -529,10 +562,7 @@ export function SwapScreen({ portfolios, balances, fiat, discreet, onAddPortfoli
   if (fromGroups.length === 0) {
     return (
       <div className="content swap-page">
-        <header className="settings-hero">
-          <h2 className="settings-hero__title">{t("swap.title")}</h2>
-          <p className="settings-hero__lede">{t("swap.disclaimer")}</p>
-        </header>
+        <h2 className="swap-page__title">{t("swap.title")}</h2>
         <div className="swap-empty">
           <p className="swap-empty__copy">{t("swap.empty")}</p>
           <button type="button" className="btn btn-primary" onClick={onAddPortfolio}>
@@ -543,72 +573,53 @@ export function SwapScreen({ portfolios, balances, fiat, discreet, onAddPortfoli
     );
   }
 
-  const fromLabel = from
-    ? t("swap.iHave", {
-        amount: formatAmount(from.amount, discreet, 8),
-        asset: assetName(from.symbol),
-      })
-    : t("swap.from");
-  const toLabel = t("swap.iWant", { asset: assetName(toSymbol || "—") });
   const canUseFiat = !!from && unitRate(from) != null;
+  const balanceLabel = from
+    ? amountUnit === "fiat"
+      ? formatMoney(
+          assetFiatValue(
+            { symbol: from.symbol, amount: from.amount, decimals: 0, usd: from.usd },
+            fiat,
+            fiatPrices,
+          ),
+          fiat,
+          discreet,
+        )
+      : `${formatAmount(from.amount, discreet, 8)} ${from.symbol}`
+    : null;
 
   return (
     <div className="content swap-page">
-      <header className="settings-hero">
-        <h2 className="settings-hero__title">{t("swap.title")}</h2>
-        <p className="settings-hero__lede">{t("swap.disclaimer")}</p>
-      </header>
+      <h2 className="swap-page__title">{t("swap.title")}</h2>
 
-      <div className="swap-body anim-page">
-        <div className="swap-panel">
+      <div className="swap-body anim-stagger">
+        <div className="swap-stack">
           <section className="swap-leg">
-            <div className="swap-leg__head">
-              <p className="swap-leg__label">{fromLabel}</p>
-              {canUseFiat ? (
-                <div
-                  className="segmented segmented--2 segmented--sm"
-                  role="radiogroup"
-                  aria-label={t("swap.amountUnit")}
-                >
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={amountUnit === "native"}
-                    className={`segmented__item${amountUnit === "native" ? " is-active" : ""}`}
-                    onClick={() => switchAmountUnit("native")}
-                  >
-                    {from?.symbol}
-                  </button>
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={amountUnit === "fiat"}
-                    className={`segmented__item${amountUnit === "fiat" ? " is-active" : ""}`}
-                    onClick={() => switchAmountUnit("fiat")}
-                  >
-                    {fiat}
-                  </button>
-                </div>
+            <div className="swap-leg__label-row">
+              <p className="swap-leg__label">{t("swap.from")}</p>
+              {balanceLabel ? (
+                <p className="swap-leg__balance">
+                  {t("swap.balance")}: <span className="swap-leg__balance-amt">{balanceLabel}</span>
+                </p>
               ) : null}
             </div>
-            <div className="swap-leg__row">
-              <SwapPick
-                groups={fromGroups}
-                value={fromKey}
-                onChange={selectFrom}
-                aria-label={t("swap.from")}
-              />
-              <div className="swap-leg__values">
-                <div
-                  className={`swap-amount-line${overBalance ? " is-invalid" : ""}`}
-                >
-                  <span className="swap-amount-prefix" aria-hidden="true">
-                    {amountUnit === "fiat" ? (
+
+            <div className={`swap-field${overBalance ? " is-invalid" : ""}`}>
+              <div className="swap-field__amount">
+                <div className="swap-amount-line">
+                  {amountUnit === "fiat" ? (
+                    <span className="swap-amount-prefix" aria-hidden="true">
                       <span className="swap-amount-prefix__sign">{fiatSign(fiat)}</span>
-                    ) : from ? (
-                      <AssetIcon symbol={from.symbol} size={22} />
-                    ) : null}
-                  </span>
+                    </span>
+                  ) : from ? (
+                    <span className="swap-amount-prefix" aria-hidden="true">
+                      <AssetIcon
+                        symbol={from.symbol}
+                        size={24}
+                        className="swap-amount-prefix__icon"
+                      />
+                    </span>
+                  ) : null}
                   <input
                     className="swap-amount-input"
                     inputMode="decimal"
@@ -617,150 +628,199 @@ export function SwapScreen({ portfolios, balances, fiat, discreet, onAddPortfoli
                     onChange={(e) => onAmountChange(e.target.value)}
                     aria-label={t("swap.from")}
                     aria-invalid={overBalance || undefined}
-                    size={Math.max(4, amount.length || 4)}
                   />
                 </div>
-                <span className="swap-amount-fiat">{secondaryDisplay}</span>
+              </div>
+              <SwapPick
+                groups={fromGroups}
+                value={fromKey}
+                onChange={selectFrom}
+                aria-label={t("swap.from")}
+              />
+            </div>
+
+            <div className="swap-leg__tools">
+              <span className="swap-amount-fiat">{secondaryDisplay}</span>
+              <div className="swap-leg__tools-right">
+                <div className="swap-presets" role="group" aria-label={t("swap.presets")}>
+                  <button
+                    type="button"
+                    className="max-balance-btn"
+                    onClick={() => setMinFromPartner()}
+                  >
+                    {t("swap.min")}
+                  </button>
+                  <button
+                    type="button"
+                    className="max-balance-btn"
+                    onClick={() => setAmountPreset(0.5)}
+                  >
+                    {t("swap.half")}
+                  </button>
+                  <button
+                    type="button"
+                    className="max-balance-btn"
+                    onClick={() => setAmountPreset(1)}
+                  >
+                    {t("swap.all")}
+                  </button>
+                </div>
+                {canUseFiat ? (
+                  <div
+                    className="segmented segmented--2 segmented--sm swap-unit"
+                    role="radiogroup"
+                    aria-label={t("swap.amountUnit")}
+                  >
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={amountUnit === "native"}
+                      className={`segmented__item${amountUnit === "native" ? " is-active" : ""}`}
+                      onClick={() => switchAmountUnit("native")}
+                    >
+                      {from?.symbol}
+                    </button>
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={amountUnit === "fiat"}
+                      className={`segmented__item${amountUnit === "fiat" ? " is-active" : ""}`}
+                      onClick={() => switchAmountUnit("fiat")}
+                    >
+                      {fiat}
+                    </button>
+                  </div>
+                ) : null}
               </div>
             </div>
           </section>
 
           <section className="swap-leg">
-            <div className="swap-leg__head">
-              <p className="swap-leg__label">{toLabel}</p>
-              {canUseFiat && toSymbol ? (
-                <div
-                  className="segmented segmented--2 segmented--sm"
-                  role="radiogroup"
-                  aria-label={t("swap.amountUnit")}
-                >
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={amountUnit === "native"}
-                    className={`segmented__item${amountUnit === "native" ? " is-active" : ""}`}
-                    onClick={() => switchAmountUnit("native")}
-                  >
-                    {toSymbol}
-                  </button>
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={amountUnit === "fiat"}
-                    className={`segmented__item${amountUnit === "fiat" ? " is-active" : ""}`}
-                    onClick={() => switchAmountUnit("fiat")}
-                  >
-                    {fiat}
-                  </button>
-                </div>
+            <div className="swap-leg__label-row">
+              <p className="swap-leg__label">{t("swap.to")}</p>
+              {toSymbol ? (
+                <p className="swap-leg__balance">{assetName(toSymbol)}</p>
               ) : null}
             </div>
-            <div className="swap-leg__row">
-              <SwapPick
-                groups={toGroups}
-                value={toKey}
-                onChange={selectTo}
-                aria-label={t("swap.to")}
-              />
-              <div className="swap-leg__values">
+
+            <div className="swap-field swap-field--read">
+              <div className="swap-field__amount">
                 <div className="swap-amount-line">
-                  <span className="swap-amount-prefix" aria-hidden="true">
-                    {amountUnit === "fiat" ? (
+                  {amountUnit === "fiat" ? (
+                    <span className="swap-amount-prefix" aria-hidden="true">
                       <span className="swap-amount-prefix__sign">{fiatSign(fiat)}</span>
-                    ) : toSymbol ? (
-                      <AssetIcon symbol={toSymbol} size={22} />
-                    ) : null}
-                  </span>
+                    </span>
+                  ) : toSymbol ? (
+                    <span className="swap-amount-prefix" aria-hidden="true">
+                      <AssetIcon
+                        symbol={toSymbol}
+                        size={24}
+                        className="swap-amount-prefix__icon"
+                      />
+                    </span>
+                  ) : null}
                   <span
                     className={`swap-amount-readout${receiveEmpty ? " is-empty" : ""}`}
                   >
                     {receivePrimary}
                   </span>
                 </div>
-                <span className="swap-amount-fiat">{receiveSecondary}</span>
               </div>
+              <SwapPick
+                groups={toGroups}
+                value={toKey}
+                onChange={selectTo}
+                aria-label={t("swap.to")}
+              />
+            </div>
+
+            <div className="swap-leg__tools">
+              <span className="swap-amount-fiat">{receiveSecondary}</span>
             </div>
           </section>
         </div>
 
-        <div className="swap-presets" role="group" aria-label={t("swap.presets")}>
-          <button type="button" className="swap-presets__btn" onClick={() => setMinFromPartner()}>
-            {t("swap.min")}
-          </button>
-          <button type="button" className="swap-presets__btn" onClick={() => setAmountPreset(0.5)}>
-            {t("swap.half")}
-          </button>
-          <button type="button" className="swap-presets__btn" onClick={() => setAmountPreset(1)}>
-            {t("swap.all")}
+        {(quote && hasAmount && !quoteBlocked) ||
+        overBalance ||
+        (belowMin && pairMin) ||
+        (pairMin && !hasAmount) ||
+        ffOrder ||
+        (provider === "fixedfloat" && !ffReady) ? (
+          <div className="swap-meta">
+            {quote && hasAmount && !quoteBlocked ? (
+              <div className="swap-rate-line">
+                <span>{t("swap.rate")}</span>
+                <strong>
+                  1 {from?.symbol} ≈ {formatCompactAmount(quote.rate)} {toSymbol}
+                </strong>
+              </div>
+            ) : null}
+
+            {overBalance ? (
+              <p className="field-hint field-hint--error">{t("swap.overBalance")}</p>
+            ) : belowMin && pairMin ? (
+              <p className="field-hint field-hint--error">
+                {t("swap.belowMin", {
+                  amount: formatCompactAmount(pairMin),
+                  asset: from?.symbol ?? "",
+                })}
+              </p>
+            ) : pairMin && !hasAmount ? (
+              <p className="field-hint">
+                {t("swap.minHint", {
+                  amount: formatCompactAmount(pairMin),
+                  asset: from?.symbol ?? "",
+                })}
+              </p>
+            ) : null}
+
+            {ffOrder ? (
+              <div className="swap-order">
+                <div className="swap-rate-line">
+                  <span>{t("swap.orderId")}</span>
+                  <strong>{ffOrder.id}</strong>
+                </div>
+                <div className="swap-rate-line">
+                  <span>{t("swap.status")}</span>
+                  <strong>{ffOrder.status}</strong>
+                </div>
+                <p className="field-hint">{t("swap.autoSubmitted")}</p>
+                <a
+                  className="swap-order__link"
+                  href={ffOrder.orderUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {t("swap.openOrder")}
+                </a>
+              </div>
+            ) : provider === "fixedfloat" && !ffReady ? (
+              <p className="field-hint">
+                {t("swap.partnerNote", { partner: PARTNER_NAME })}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="swap-actions">
+          <button
+            type="button"
+            className="btn btn-primary btn-block"
+            disabled={
+              busy ||
+              !hasAmount ||
+              overBalance ||
+              belowMin ||
+              !from ||
+              !toSymbol ||
+              quoteBlocked ||
+              (provider === "jupiter" && !quote)
+            }
+            onClick={onCta}
+          >
+            {ctaLabel}
           </button>
         </div>
-
-        {quote && hasAmount && !quoteBlocked ? (
-          <div className="swap-rate-line">
-            <span>{t("swap.rate")}</span>
-            <strong>
-              1 {from?.symbol} ≈ {quote.rate} {toSymbol}
-            </strong>
-          </div>
-        ) : null}
-
-        {overBalance ? (
-          <p className="swap-route-note swap-route-note--warn">{t("swap.overBalance")}</p>
-        ) : belowMin && pairMin ? (
-          <p className="swap-route-note swap-route-note--warn">
-            {t("swap.belowMin", { amount: pairMin, asset: from?.symbol ?? "" })}
-          </p>
-        ) : pairMin && !hasAmount ? (
-          <p className="swap-route-note swap-route-note--soft">
-            {t("swap.minHint", { amount: pairMin, asset: from?.symbol ?? "" })}
-          </p>
-        ) : null}
-
-        {ffOrder ? (
-          <div className="swap-order">
-            <div className="swap-rate-line">
-              <span>{t("swap.orderId")}</span>
-              <strong>{ffOrder.id}</strong>
-            </div>
-            <div className="swap-rate-line">
-              <span>{t("swap.status")}</span>
-              <strong>{ffOrder.status}</strong>
-            </div>
-            <p className="swap-route-note swap-route-note--soft">{t("swap.autoSubmitted")}</p>
-            <a
-              className="swap-route-note"
-              href={ffOrder.orderUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {t("swap.openOrder")}
-            </a>
-          </div>
-        ) : provider === "fixedfloat" && ffReady ? (
-          <p className="swap-route-note swap-route-note--soft">{t("swap.oneClickNote")}</p>
-        ) : provider === "fixedfloat" && !ffReady ? (
-          <p className="swap-route-note swap-route-note--soft">
-            {t("swap.partnerNote", { partner: PARTNER_NAME })}
-          </p>
-        ) : null}
-
-        <button
-          type="button"
-          className="swap-cta"
-          disabled={
-            busy ||
-            !hasAmount ||
-            overBalance ||
-            belowMin ||
-            !from ||
-            !toSymbol ||
-            quoteBlocked ||
-            (provider === "jupiter" && !quote)
-          }
-          onClick={onCta}
-        >
-          {ctaLabel}
-        </button>
       </div>
     </div>
   );

@@ -43,6 +43,24 @@ export function saveOverviewLedger(portfolioIdsKey: string, ledger: LedgerEvent[
   ssSet(LEDGER_KEY + portfolioIdsKey, ledger);
 }
 
+/** Drop overview growth ledger so charts rebuild from fresh history. */
+export function invalidateOverviewLedger(portfolioIdsKey?: string) {
+  try {
+    if (portfolioIdsKey) {
+      sessionStorage.removeItem(LEDGER_KEY + portfolioIdsKey);
+      return;
+    }
+    const keys: string[] = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i);
+      if (k?.startsWith(LEDGER_KEY)) keys.push(k);
+    }
+    for (const k of keys) sessionStorage.removeItem(k);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function mergeLedgerEvents(a: LedgerEvent[], b: LedgerEvent[]): LedgerEvent[] {
   const key = (e: LedgerEvent) => `${e.t}|${e.coinId}|${e.delta}`;
   const map = new Map<string, LedgerEvent>();

@@ -15,8 +15,13 @@ pub fn send_evm_native(
     from: &str,
     to: &str,
     amount_eth: &str,
+    send_max: bool,
 ) -> Result<String, OpalError> {
-    let value = parse_eth_to_wei(amount_eth)?;
+    let value = if send_max {
+        resolve_evm_max_value(http, chain, from)?
+    } else {
+        parse_eth_to_wei(amount_eth)?
+    };
     sign_and_send(http, chain, sk_hex, from, to, value, &[], None)
 }
 
@@ -59,6 +64,26 @@ pub fn replace_evm_native(
         &[],
         Some((nonce, fee_multiplier)),
     )
+}
+
+fn resolve_evm_max_value(http: &HttpCtx, chain: ChainId, from: &str) -> Result<u128, OpalError> {
+    let bal = http.evm_balance_wei(chain, from)?;
+    let tip = 1_000_000_000u128;
+    let fees = http
+        .eth_rpc(chain, "eth_gasPrice", json!([]))?
+        .as_str()
+        .map(|s| crate::network::u128_from_hex(s).unwrap_or(2_000_000_000))
+        .unwrap_or(2_000_000_000);
+    // Match the fee buffer used in [`sign_and_send`] (mult = 2 for normal sends).
+    let max_fee = fees.saturating_mul(2).max(tip * 2);
+    let gas_cost = max_fee.saturating_mul(21_000);
+    let send = bal.saturating_sub(gas_cost);
+    if send == 0 {
+        return Err(OpalError::InvalidInput(
+            "insufficient balance for amount plus gas".into(),
+        ));
+    }
+    Ok(send)
 }
 
 fn sign_and_send(
