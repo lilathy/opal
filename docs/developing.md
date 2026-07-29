@@ -67,6 +67,6 @@ Updater signing keys belong under `%USERPROFILE%\.tauri\` and in GitHub Actions 
 | Send paths | `src-tauri/src/wallet/send/` |
 | Trezor | `src-tauri/src/trezor/` |
 
-## Contributing
+## Security reports
 
-See [CONTRIBUTING.md](../CONTRIBUTING.md). Security reports go through [SECURITY.md](../SECURITY.md).
+See [SECURITY.md](../SECURITY.md).
